@@ -1,0 +1,12 @@
+{
+  "name": "mafia-one-card-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev -w @mafia/frontend",
+    "build:frontend": "npm run build -w @mafia/frontend",
+    "dev:backend": "npm run dev -w @mafia/backend"
+  }
+}
