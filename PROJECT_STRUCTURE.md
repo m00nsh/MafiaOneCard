@@ -7,36 +7,25 @@
 
 ```
 MafiaOneCard/
-├── package.json            # 루트 프로젝트 설정 (Workspaces 정의: "apps/*")
+├── package.json            # 루트 프로젝트 설정 (Workspaces 정의)
+├── pnpm-lock.yaml          # 의존성 잠금 파일 (pnpm)
 ├── README.md               # 프로젝트 시작 및 실행 가이드
 ├── PROJECT_STRUCTURE.md    # 현재 문서 (구조 설명)
 │
-└── apps/                   # 애플리케이션 워크스페이스
-    ├── frontend/           # React 프론트엔드 애플리케이션
-    │   ├── package.json    # 프론트엔드 의존성 (@mafia/frontend)
-    │   ├── vite.config.ts  # Vite 번들러 설정 (Alias: @ -> src)
-    │   ├── index.html      # 웹 진입점
-    │   └── src/            # 메인 소스 코드
-    │       ├── app/
-    │       │   ├── App.tsx         # 최상위 컴포넌트 (라우팅/상태 관리)
-    │       │   ├── components/     # UI 및 화면 컴포넌트
-    │       │   │   ├── ui/         # Shadcn/UI 디자인 시스템 (Button, Card 등)
-    │       │   │   └── [Screens]   # 기능별 화면 (GameScreen, Lobby 등)
-    │       │   ├── utils/          # 유틸리티 (게임 로직, 상수 등)
-    │       │   └── styles/         # 전역 스타일 (CSS)
-    │       └── main.tsx    # React 마운트 포인트
-    │
-    └── backend/            # 백엔드 애플리케이션 (Node.js)
-        ├── package.json    # 백엔드 의존성 (@mafia/backend)
-        └── src/            # 백엔드 소스 (현재 초기 단계)
-            └── index.ts    # 서버 시작점
+├── apps/                   # 애플리케이션 워크스페이스
+│   ├── frontend/           # React 프론트엔드 애플리케이션 (@mafia/frontend)
+│   └── backend/            # 백엔드 애플리케이션 (@mafia/backend)
+│
+└── packages/               # 공유 패키지 워크스페이스
+    └── shared/             # 공통 로직 및 타입 정의 (@mafia/shared)
 ```
 
 ## 상세 구성 요소
 
 ### 1. Root (`/`)
-- **package.json**: `npm install` 실행 시 프론트엔드와 백엔드의 모든 패키지를 한번에 설치합니다.
-- **apps/**: 실제 서비스 코드가 위치하는 작업 공간입니다.
+- **package.json**: `pnpm install` 실행 시 모든 워크스페이스의 의존성을 효율적으로 설치합니다.
+- **apps/**: 실제 서비스 코드(프론트엔드, 백엔드)가 위치하는 작업 공간입니다.
+- **packages/**: 여러 서비스에서 공통으로 재사용하는 코드를 관리합니다.
 
 ### 2. Frontend (`apps/frontend`)
 - **기술 스택**: React 18, Vite, TypeScript, Tailwind CSS, Shadcn/UI, React DnD (드래그앤드롭)
