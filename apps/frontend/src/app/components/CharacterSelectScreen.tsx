@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
+import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
 
 export interface Character {
   id: string;
@@ -70,32 +71,15 @@ export const characters: Character[] = [
 ];
 
 interface CharacterSelectScreenProps {
-  playerCount: number;
   onComplete: (selectedCharacters: string[]) => void;
 }
 
-export default function CharacterSelectScreen({ playerCount, onComplete }: CharacterSelectScreenProps) {
+export default function CharacterSelectScreen({ onComplete }: CharacterSelectScreenProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedCharacters, setSelectedCharacters] = useState<string[]>([]);
-  const [currentPlayer, setCurrentPlayer] = useState(1);
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
 
-  // Adjust visible characters based on screen size
-  const getVisibleCount = () => {
-    if (typeof window === 'undefined') return 4;
-    if (window.innerWidth < 640) return 1; // mobile
-    if (window.innerWidth < 1024) return 2; // tablet
-    return 4; // desktop
-  };
-
-  const [visibleCount, setVisibleCount] = useState(getVisibleCount());
-
-  // Update visible count on resize
-  useEffect(() => {
-    const handleResize = () => setVisibleCount(getVisibleCount());
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
+  // Show 4 cards at a time
+  const visibleCount = 4;
   const visibleCharacters = characters.slice(currentIndex, currentIndex + visibleCount);
 
   const handlePrevious = () => {
@@ -110,64 +94,90 @@ export default function CharacterSelectScreen({ playerCount, onComplete }: Chara
     }
   };
 
-  const handleSelectCharacter = (characterId: string) => {
-    const newSelected = [...selectedCharacters, characterId];
-    setSelectedCharacters(newSelected);
-
-    if (currentPlayer < playerCount) {
-      setCurrentPlayer(currentPlayer + 1);
-    } else {
-      onComplete(newSelected);
-    }
+  const handleSelect = () => {
+    if (!selectedCharacterId) return;
+    onComplete([selectedCharacterId]);
   };
 
   return (
-    <div className="size-full flex flex-col items-center justify-center bg-gradient-to-br from-green-700 via-green-600 to-green-800 p-4 sm:p-8 overflow-hidden">
-      <h2 className="text-2xl sm:text-3xl text-white mb-3 sm:mb-4">
-        플레이어 {currentPlayer} - 캐릭터 선택
-      </h2>
-      <p className="text-white/80 mb-6 sm:mb-8">({currentPlayer}/{playerCount})</p>
-
-      <div className="relative flex items-center gap-2 sm:gap-4 w-full max-w-6xl justify-center">
-        <button
-          onClick={handlePrevious}
-          disabled={currentIndex === 0}
-          className="p-2 sm:p-4 bg-white/20 hover:bg-white/30 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all flex-shrink-0"
-        >
-          <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-        </button>
-
-        <div className="flex gap-3 sm:gap-6 overflow-hidden justify-center">
-          {visibleCharacters.map((character) => (
-            <div
-              key={character.id}
-              onClick={() => handleSelectCharacter(character.id)}
-              className="w-[150px] sm:w-[200px] bg-white/10 backdrop-blur-sm rounded-xl overflow-hidden cursor-pointer hover:bg-white/20 transition-all transform hover:scale-105 shadow-xl flex-shrink-0"
-            >
-              <div className="h-[150px] sm:h-[200px] overflow-hidden">
-                <ImageWithFallback
-                  src={character.imageUrl}
-                  alt={character.name}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="p-3 sm:p-4 space-y-1 sm:space-y-2">
-                <h3 className="text-lg sm:text-xl text-white text-center">{character.name}</h3>
-                <p className="text-xs sm:text-sm text-white/80 min-h-[45px] sm:min-h-[60px] line-clamp-3">{character.description}</p>
-                <p className="text-yellow-400 text-center text-sm">쿨타임: {character.cooldown}</p>
-              </div>
-            </div>
-          ))}
+    <LandscapeLayout>
+      <div className="size-full flex flex-col items-center justify-center p-4 sm:p-8 relative">
+        {/* Header - Top Left "캐릭터 선택하기" */}
+        <div className="absolute top-4 left-16 flex items-center gap-2">
+          <span className="text-white text-lg font-bold">캐릭터 선택하기</span>
         </div>
 
+        {/* Header - Center */}
+        <div className="text-center mb-8">
+          <h2 className="text-2xl sm:text-3xl text-white font-bold mb-2">
+            직업 선택
+          </h2>
+          <p className="text-white/80">게임에서 사용할 자신의 캐릭터를 선택해주세요</p>
+        </div>
+
+        <div className="relative flex items-center gap-2 sm:gap-4 w-full max-w-6xl justify-center mb-8">
+          <button
+            onClick={handlePrevious}
+            disabled={currentIndex === 0}
+            className="p-2 bg-white/20 hover:bg-white/30 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all flex-shrink-0"
+          >
+            <ChevronLeft className="w-8 h-8 text-white" />
+          </button>
+
+          <div className="flex gap-4 sm:gap-6 overflow-hidden justify-center items-stretch h-[320px]">
+            {visibleCharacters.map((character) => (
+              <div
+                key={character.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedCharacterId(character.id)}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setSelectedCharacterId(character.id)}
+                className={`w-[200px] bg-white rounded-xl overflow-hidden cursor-pointer transition-all transform hover:scale-105 shadow-xl flex flex-col relative ${selectedCharacterId === character.id ? 'ring-4 ring-yellow-400 scale-105' : ''
+                  }`}
+              >
+                <div className="h-[140px] overflow-hidden">
+                  <ImageWithFallback
+                    src={character.imageUrl}
+                    alt={character.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="p-4 flex-1 flex flex-col items-center text-center bg-white">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">{character.name}</h3>
+                  <p className="text-sm text-gray-600 line-clamp-3 mb-2 flex-grow">{character.description}</p>
+                  <div className="mt-auto pt-2 w-full border-t border-gray-200">
+                    <p className="text-orange-600 font-bold text-sm">쿨타임: {character.cooldown}</p>
+                  </div>
+                </div>
+                {/* Selection Overlay */}
+                {selectedCharacterId === character.id && (
+                  <div className="absolute inset-0 bg-yellow-400/20 pointer-events-none" />
+                )}
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={handleNext}
+            disabled={currentIndex >= characters.length - visibleCount}
+            className="p-2 bg-white/20 hover:bg-white/30 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all flex-shrink-0"
+          >
+            <ChevronRight className="w-8 h-8 text-white" />
+          </button>
+        </div>
+
+        {/* Select Button */}
         <button
-          onClick={handleNext}
-          disabled={currentIndex >= characters.length - visibleCount}
-          className="p-2 sm:p-4 bg-white/20 hover:bg-white/30 rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all flex-shrink-0"
+          onClick={handleSelect}
+          disabled={!selectedCharacterId}
+          className={`px-12 py-3 text-xl font-bold rounded-lg transition-all shadow-lg ${selectedCharacterId
+            ? 'bg-gray-300 hover:bg-gray-200 text-gray-900 border-b-4 border-gray-400 active:border-b-0 active:translate-y-1'
+            : 'bg-gray-500/50 text-gray-400 cursor-not-allowed'
+            }`}
         >
-          <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+          Select
         </button>
       </div>
-    </div>
+    </LandscapeLayout>
   );
 }

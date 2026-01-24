@@ -1,19 +1,37 @@
+import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
+
 interface MainScreenProps {
   onStart: () => void;
+  onSpriteTest?: () => void;
 }
 
-export default function MainScreen({ onStart }: MainScreenProps) {
+export default function MainScreen({ onStart, onSpriteTest }: MainScreenProps) {
   return (
-    <div className="size-full flex flex-col items-center justify-center bg-gradient-to-br from-green-700 via-green-600 to-green-800">
-      <div className="text-center space-y-12">
-        <h1 className="text-6xl text-white mb-8">원카드 배틀</h1>
+    <LandscapeLayout>
+
+
+      <div className="size-full flex flex-col items-center justify-center space-y-12">
+        <h1 className="text-6xl sm:text-8xl text-white font-medium tracking-wide text-center drop-shadow-lg">
+          마피아 원카드
+        </h1>
+
         <button
           onClick={onStart}
-          className="px-16 py-6 bg-yellow-500 hover:bg-yellow-400 text-gray-900 rounded-xl transition-all transform hover:scale-105 shadow-lg"
+          className="px-12 py-4 bg-gray-300 hover:bg-gray-200 text-gray-900 text-2xl sm:text-3xl rounded-full transition-all transform hover:scale-105 shadow-xl font-bold min-w-[200px]"
         >
-          게임 시작
+          Game Start!
         </button>
+
+        {/* Debug Button */}
+        {onSpriteTest && (
+          <button
+            onClick={onSpriteTest}
+            className="text-white/30 text-sm hover:text-white/80 transition-colors absolute bottom-4 right-4"
+          >
+            [Dev: Card Sprites]
+          </button>
+        )}
       </div>
-    </div>
+    </LandscapeLayout>
   );
 }

@@ -6,9 +6,11 @@ import RoomScreen from '@/app/components/RoomScreen';
 import LoadingScreen from '@/app/components/LoadingScreen';
 import CharacterSelectScreen from '@/app/components/CharacterSelectScreen';
 import GameScreen from '@/app/components/GameScreen';
+import CardSpriteTestScreen from '@/app/components/CardSpriteTestScreen';
+import { Toaster } from 'sonner';
 
 export type GameMode = 'custom' | 'quick';
-export type Screen = 'main' | 'gameMode' | 'playerCount' | 'room' | 'loading' | 'characterSelect' | 'game';
+export type Screen = 'main' | 'gameMode' | 'playerCount' | 'room' | 'loading' | 'characterSelect' | 'game' | 'spriteTest';
 
 export interface GameState {
   screen: Screen;
@@ -62,11 +64,18 @@ export default function App() {
   return (
     <div className="size-full bg-background overflow-hidden">
       {gameState.screen === 'main' && (
-        <MainScreen onStart={() => navigateToScreen('gameMode')} />
+        <MainScreen
+          onStart={() => navigateToScreen('gameMode')}
+          onSpriteTest={() => navigateToScreen('spriteTest')}
+        />
       )}
-      
+
+      {gameState.screen === 'spriteTest' && (
+        <CardSpriteTestScreen onBack={() => navigateToScreen('main')} />
+      )}
+
       {gameState.screen === 'gameMode' && (
-        <GameModeScreen 
+        <GameModeScreen
           onSelectMode={(mode, isHost) => {
             setGameMode(mode);
             setIsHost(isHost);
@@ -119,7 +128,6 @@ export default function App() {
 
       {gameState.screen === 'characterSelect' && (
         <CharacterSelectScreen
-          playerCount={gameState.playerCount}
           onComplete={(characters) => {
             setSelectedCharacters(characters);
             navigateToScreen('game');

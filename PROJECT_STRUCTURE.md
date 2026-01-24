@@ -1,0 +1,53 @@
+# Project Structure: MafiaOneCard
+
+이 문서는 `MafiaOneCard` 프로젝트의 폴더 구조와 각 주요 파일/디렉토리의 역할을 설명합니다.
+이 프로젝트는 **Monorepo** 구조로 리팩토링되었으며, 프론트엔드와 백엔드가 분리되어 관리됩니다.
+
+## 디렉토리 구조 요약
+
+```
+MafiaOneCard/
+├── package.json            # 루트 프로젝트 설정 (Workspaces 정의: "apps/*")
+├── README.md               # 프로젝트 시작 및 실행 가이드
+├── PROJECT_STRUCTURE.md    # 현재 문서 (구조 설명)
+│
+└── apps/                   # 애플리케이션 워크스페이스
+    ├── frontend/           # React 프론트엔드 애플리케이션
+    │   ├── package.json    # 프론트엔드 의존성 (@mafia/frontend)
+    │   ├── vite.config.ts  # Vite 번들러 설정 (Alias: @ -> src)
+    │   ├── index.html      # 웹 진입점
+    │   └── src/            # 메인 소스 코드
+    │       ├── app/
+    │       │   ├── App.tsx         # 최상위 컴포넌트 (라우팅/상태 관리)
+    │       │   ├── components/     # UI 및 화면 컴포넌트
+    │       │   │   ├── ui/         # Shadcn/UI 디자인 시스템 (Button, Card 등)
+    │       │   │   └── [Screens]   # 기능별 화면 (GameScreen, Lobby 등)
+    │       │   ├── utils/          # 유틸리티 (게임 로직, 상수 등)
+    │       │   └── styles/         # 전역 스타일 (CSS)
+    │       └── main.tsx    # React 마운트 포인트
+    │
+    └── backend/            # 백엔드 애플리케이션 (Node.js)
+        ├── package.json    # 백엔드 의존성 (@mafia/backend)
+        └── src/            # 백엔드 소스 (현재 초기 단계)
+            └── index.ts    # 서버 시작점
+```
+
+## 상세 구성 요소
+
+### 1. Root (`/`)
+- **package.json**: `npm install` 실행 시 프론트엔드와 백엔드의 모든 패키지를 한번에 설치합니다.
+- **apps/**: 실제 서비스 코드가 위치하는 작업 공간입니다.
+
+### 2. Frontend (`apps/frontend`)
+- **기술 스택**: React 18, Vite, TypeScript, Tailwind CSS, Shadcn/UI, React DnD (드래그앤드롭)
+- **주요 폴더 및 파일**:
+  - `src/app/App.tsx`: 애플리케이션의 메인 상태(`GameState`)와 라우팅(화면 전환)을 담당합니다.
+  - `src/app/components/`:
+    - `GameScreen.tsx`: 핵심 게임 플레이 화면 (카드 덱, 핸드, 플레이어 정보)
+    - `RoomScreen.tsx`: 대기방 및 방 코드 공유 기능
+    - `CharacterSelectScreen.tsx`: 캐릭터 선택 화면 (접근성 적용됨)
+  - `src/app/utils/gameLogic.ts`: 카드 덱 생성, 승패 판정, 카드 효과 등 순수 게임 로직이 포함됩니다.
+
+### 3. Backend (`apps/backend`)
+- **기술 스택**: Node.js, TypeScript (예정)
+- **상태**: 초기 설정 완료. `src/index.ts`를 기점으로 API 서버가 구축될 예정입니다.
