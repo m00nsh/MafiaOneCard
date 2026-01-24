@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { ArrowUpDown } from 'lucide-react';
 import PlayingCard from '@/app/components/PlayingCard';
 import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
-import { Card, Suit } from '@/app/utils/gameLogic';
+import { Card } from '@/app/utils/gameLogic';
 
 // Mock Data Types
 interface Player {
@@ -30,7 +29,7 @@ const OpponentProfile = ({ player }: { player: Player }) => {
       <div className="absolute top-0 left-0 w-full h-full bg-blue-800 rounded-lg border border-white/20 transform translate-x-0.5 translate-y-0.5" />
       {/* Main Back */}
       <PlayingCard
-        card={{ suit: 'joker', rank: 'JOKER' }}
+        card={{ id: 'deck-back', suit: 'joker', rank: 'JOKER_BW' }}
         faceDown={true}
         className="absolute top-0 left-0 shadow-lg"
       />
@@ -52,21 +51,21 @@ const OpponentProfile = ({ player }: { player: Player }) => {
   );
 };
 
-export default function GameScreen({ playerCount, selectedCharacters }: GameScreenProps) {
+export default function GameScreen({ }: GameScreenProps) {
   // Mock State
   const [myHand, setMyHand] = useState<Card[]>([
-    { suit: 'spades', rank: 'A' },
-    { suit: 'diamonds', rank: 'K' },
-    { suit: 'hearts', rank: 'Q' },
-    { suit: 'clubs', rank: 'A' },
-    { suit: 'spades', rank: 'K' },
-    { suit: 'diamonds', rank: 'Q' },
-    { suit: 'hearts', rank: 'A' },
-    { suit: 'clubs', rank: 'K' },
-    { suit: 'spades', rank: 'Q' },
+    { id: 'c1', suit: 'spades', rank: 'A' },
+    { id: 'c2', suit: 'diamonds', rank: 'K' },
+    { id: 'c3', suit: 'hearts', rank: 'Q' },
+    { id: 'c4', suit: 'clubs', rank: 'A' },
+    { id: 'c5', suit: 'spades', rank: 'K' },
+    { id: 'c6', suit: 'diamonds', rank: 'Q' },
+    { id: 'c7', suit: 'hearts', rank: 'A' },
+    { id: 'c8', suit: 'clubs', rank: 'K' },
+    { id: 'c9', suit: 'spades', rank: 'Q' },
   ]);
 
-  const [topCard, setTopCard] = useState<Card>({ suit: 'clubs', rank: 'A' });
+  const [topCard, setTopCard] = useState<Card>({ id: 'top', suit: 'clubs', rank: 'A' });
   const [deckCount, setDeckCount] = useState(25);
   const [attackStack, setAttackStack] = useState(8);
 
@@ -89,7 +88,7 @@ export default function GameScreen({ playerCount, selectedCharacters }: GameScre
 
   const handleDrawCard = () => {
     // In real app, emit draw event
-    setMyHand(prev => [...prev, { suit: 'joker', rank: 'JOKER' }]); // Dummy draw
+    setMyHand(prev => [...prev, { id: `draw-${Date.now()}`, suit: 'joker', rank: 'JOKER_BW', isJoker: true }]); // Dummy draw
   };
 
   return (
@@ -118,9 +117,15 @@ export default function GameScreen({ playerCount, selectedCharacters }: GameScre
         {/* Center Area: Deck & Discard */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-8 items-center">
           {/* Deck (Face Down) */}
-          <div onClick={handleDrawCard}>
+          <div
+            onClick={handleDrawCard}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleDrawCard()}
+            className="cursor-pointer"
+          >
             <PlayingCard
-              card={{ suit: 'joker', rank: 'JOKER' }}
+              card={{ id: 'deck-top', suit: 'joker', rank: 'JOKER_BW' }}
               faceDown={true}
               className="hover:scale-105 transition-transform"
             />
@@ -150,8 +155,8 @@ export default function GameScreen({ playerCount, selectedCharacters }: GameScre
           {/* Hand Cards (Center) */}
           <div className="flex-1 flex justify-center items-end -space-x-8 hover:space-x-1 transition-all duration-300 pb-4">
             {myHand.map((card, index) => {
-              // Simple playable logic: Match Suit or Rank
-              const isPlayable = card.suit === topCard.suit || card.rank === topCard.rank || card.rank === 'JOKER';
+              // Simple playable logic: Match Suit or Rank or if card is Joker
+              const isPlayable = card.suit === topCard.suit || card.rank === topCard.rank || card.isJoker;
               return (
                 <div key={index} className="relative transition-all duration-300 hover:-translate-y-6 hover:z-50">
                   <PlayingCard

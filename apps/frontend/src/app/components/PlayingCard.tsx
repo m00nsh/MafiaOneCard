@@ -30,9 +30,9 @@ export default function PlayingCard({ card, faceDown, onClick, className = '', s
       row = 4;
       col = 0;
     } else if (card.suit === 'joker') {
-      // Row 4. Col 1 (Black), Col 2 (Red). Determine based on rank or default
+      // Row 4. Col 1 (Black/BW), Col 2 (Red/Color).
       row = 4;
-      col = card.rank === 'RED_JOKER' ? 2 : 1; // Assuming checking generic joker
+      col = card.rank === 'JOKER_COLOR' ? 2 : 1;
     } else {
       // Suits
       switch (card.suit) {

@@ -41,7 +41,7 @@ export default function CardSpriteTestScreen({ onBack }: CardSpriteTestScreenPro
                                 {ranks.map(rank => (
                                     <div key={`${suit}-${rank}`} className="flex justify-center p-1">
                                         <PlayingCard
-                                            card={{ suit, rank }}
+                                            card={{ id: `test-${suit}-${rank}`, suit, rank }}
                                             className="w-20" // Aspect ratio handled by component
                                         />
                                     </div>
@@ -56,7 +56,7 @@ export default function CardSpriteTestScreen({ onBack }: CardSpriteTestScreenPro
                             </div>
                             <div className="flex justify-center p-1">
                                 <PlayingCard
-                                    card={{ suit: 'joker', rank: 'JOKER' as any }}
+                                    card={{ id: 'back', suit: 'joker', rank: 'JOKER_BW' }}
                                     faceDown={true}
                                     className="w-20" // Width controlled, height auto by aspect-ratio
                                 />
@@ -64,14 +64,14 @@ export default function CardSpriteTestScreen({ onBack }: CardSpriteTestScreenPro
                             <div className="flex justify-center p-1">
                                 {/* Black Joker */}
                                 <PlayingCard
-                                    card={{ suit: 'joker', rank: 'JOKER' as any }}
+                                    card={{ id: 'joker-bw', suit: 'joker', rank: 'JOKER_BW' }}
                                     className="w-20"
                                 />
                             </div>
                             <div className="flex justify-center p-1">
                                 {/* Red Joker */}
                                 <PlayingCard
-                                    card={{ suit: 'joker', rank: 'RED_JOKER' as any }}
+                                    card={{ id: 'joker-color', suit: 'joker', rank: 'JOKER_COLOR' }}
                                     className="w-20"
                                 />
                             </div>
