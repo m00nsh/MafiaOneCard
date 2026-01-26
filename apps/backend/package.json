@@ -9,11 +9,19 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "colyseus": "0.16.0",
+    "@colyseus/schema": "1.0.46",
+    "colyseus.js": "0.16.0",
+    "@colyseus/ws-transport": "0.16.0",
     "@colyseus/core": "^0.16.24",
-    "@colyseus/schema": "^3.0.76",
+    "@colyseus/monitor": "~0.16.7",
     "@mafia/shared": "workspace:*",
-    "colyseus": "^0.16.5",
     "express": "^5.2.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "@colyseus/schema": "1.0.46"
+    }
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
