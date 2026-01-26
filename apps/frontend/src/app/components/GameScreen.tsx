@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import PlayingCard from '@/app/components/PlayingCard';
 import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
-import { Card, createDeck } from '@/app/utils/gameLogic';
+import { Card } from '@/app/utils/gameLogic'; // UICard 타입
+import { useColyseusRoom } from '@/app/hooks/useColyseusRoom';
+import { DEBUG } from '@/app/config/server';
+// Note: createDeck은 서버에서 처리하므로 제거됨
 
 // Mock Data Types
 interface Player {
@@ -192,8 +195,18 @@ const generateMockOpponents = (totalPlayers: number): Player[] => {
 };
 
 export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
+  // Colyseus 연결
+  const { status, sessionId, gameState, connect, error } = useColyseusRoom();
+
+  // 컴포넌트 마운트 시 자동 연결
+  useEffect(() => {
+    connect({ name: `Player-${Math.random().toString(36).substr(2, 9)}` });
+    
+    // 언마운트 시 연결 해제는 useColyseusRoom 내부에서 처리됨
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Mock State
-  const myId = 'me';
+  const myId = sessionId || 'me'; // 서버에서 받은 sessionId 사용
   const [turnPlayerId, setTurnPlayerId] = useState<string>(myId); // start with my turn
   const opponents = generateMockOpponents(playerCount);
 
@@ -201,9 +214,18 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
   const [sortMode, setSortMode] = useState<'none' | 'suit' | 'rank'>('none');
 
   const [myHand, setMyHand] = useState<Card[]>(() => {
-    // Initialize with 7 random cards from a fresh deck
-    const deck = createDeck();
-    return deck.slice(0, 7);
+    // TODO: 서버에서 받은 카드로 초기화 (현재는 Mock 데이터)
+    // 게임 시작 시 서버에서 분배된 카드를 받아서 설정
+    // 임시 Mock 데이터 (서버 연동 후 제거)
+    return [
+      { id: 'mock-1', suit: 'hearts', rank: 'A' },
+      { id: 'mock-2', suit: 'spades', rank: 'K' },
+      { id: 'mock-3', suit: 'diamonds', rank: 'Q' },
+      { id: 'mock-4', suit: 'clubs', rank: 'J' },
+      { id: 'mock-5', suit: 'hearts', rank: '10' },
+      { id: 'mock-6', suit: 'spades', rank: '7' },
+      { id: 'mock-7', suit: 'diamonds', rank: '3' },
+    ];
   });
 
   const [topCard, setTopCard] = useState<Card>({ id: 'top', suit: 'clubs', rank: 'A' });
@@ -285,22 +307,13 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
   const handleDrawCard = () => {
     if (!isMyTurn) return;
 
-    // In real app, emit draw event
-    // Draw a random card from a fresh shuffled deck for testing
-    const newDeck = createDeck();
-    const drawnCard = newDeck[0];
-
-    // Ensure unique ID for React keys
-    const cardWithUniqueId = { ...drawnCard, id: `draw-${Date.now()}` };
-
-    setMyHand(prev => {
-      const newHand = [...prev, cardWithUniqueId];
-      if (sortMode !== 'none') {
-        newHand.sort(getSortComparator(sortMode));
-      }
-      return newHand;
-    });
-
+    // TODO: 서버로 draw_card 메시지 전송
+    // 서버에서 뽑은 카드를 받아서 myHand에 추가
+    // 현재는 Mock 로직 (서버 연동 후 제거)
+    
+    // Mock: 임시로 빈 카드 추가 (서버 연동 시 제거)
+    console.warn('[Mock] handleDrawCard: 서버 연동 필요');
+    
     // Mock Turn Change (End turn after draw)
     setTurnPlayerId('op1');
     setTimeout(() => setTurnPlayerId(myId), 2000);
@@ -334,6 +347,33 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
   return (
     <LandscapeLayout>
       <div className="size-full relative p-4 sm:p-8 flex flex-col justify-between">
+        {/* Connection Status Indicator */}
+        <div className="absolute top-2 right-2 z-50 flex items-center gap-2">
+          <div className={`w-3 h-3 rounded-full ${
+            status === 'connected' ? 'bg-green-500 animate-pulse' :
+            status === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+            status === 'error' ? 'bg-red-500' :
+            'bg-gray-500'
+          }`} />
+          <span className="text-white text-sm font-bold bg-black/60 px-2 py-1 rounded">
+            {status === 'connected' ? '연결됨' :
+             status === 'connecting' ? '연결 중...' :
+             status === 'error' ? '연결 실패' :
+             '연결 끊김'}
+          </span>
+          {DEBUG && sessionId && (
+            <span className="text-white text-xs bg-black/60 px-2 py-1 rounded font-mono">
+              {sessionId.substring(0, 8)}
+            </span>
+          )}
+        </div>
+        {error && (
+          <div className="absolute top-12 right-2 z-50 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg max-w-md">
+            <p className="font-bold">연결 오류</p>
+            <p className="text-sm">{error.message}</p>
+          </div>
+        )}
+
         {/* Header Title replaced by Turn Indicator */}
         <TurnDirectionIndicator direction={direction} />
 

@@ -1,7 +1,8 @@
-import { Card } from '@/app/utils/gameLogic';
+import { Card } from '@/app/utils/gameLogic'; // UICard 타입 (gameLogic에서 export)
+// Note: Card는 이미 UICard로 export되므로 추가 변환 불필요
 
 interface PlayingCardProps {
-  card: Card;
+  card: Card; // UICard 타입
   faceDown?: boolean;
   onClick?: () => void;
   className?: string;

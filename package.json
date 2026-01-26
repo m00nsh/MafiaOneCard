@@ -11,7 +11,8 @@
   },
   "pnpm": {
     "overrides": {
-      "vite": "6.3.5"
+      "vite": "6.3.5",
+      "@colyseus/schema": "1.0.46"
     }
   }
 }

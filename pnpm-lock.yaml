@@ -6,6 +6,7 @@ settings:
 
 overrides:
   vite: 6.3.5
+  '@colyseus/schema': 1.0.46
 
 importers:
 
@@ -59,6 +60,9 @@ importers:
 
   apps/frontend:
     dependencies:
+      '@colyseus/schema':
+        specifier: 1.0.46
+        version: 1.0.46
       '@emotion/react':
         specifier: 11.14.0
         version: 11.14.0(@types/react@19.2.9)(react@18.3.1)
@@ -164,6 +168,9 @@ importers:
       cmdk:
         specifier: 1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.9))(@types/react@19.2.9)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      colyseus.js:
+        specifier: 0.16.0
+        version: 0.16.0
       date-fns:
         specifier: 3.6.0
         version: 3.6.0
@@ -352,7 +359,7 @@ packages:
     resolution: {integrity: sha512-wbq18J8Prj9xq/N1B5j27B3JkzPbzyGYOfSWjCowbV1HH5FGq1sAwvSFg6TUWO3kA4fipGv4a9CgrCKXI/R/4g==}
     engines: {node: '>= 18.x'}
     peerDependencies:
-      '@colyseus/schema': ^3.0.0
+      '@colyseus/schema': 1.0.46
       '@pm2/io': ^6.1.0
 
   '@colyseus/greeting-banner@2.0.6':
@@ -372,10 +379,6 @@ packages:
 
   '@colyseus/schema@1.0.46':
     resolution: {integrity: sha512-0cgirRomXDuDlppgJPXDLzsWw8/ZHwJEnndgzyX9hOCoFHJyFIyOYoKIV4eVPtKNQm6l6rGax1rE2LId4ujr4g==}
-    hasBin: true
-
-  '@colyseus/schema@3.0.76':
-    resolution: {integrity: sha512-i+ceBZyhB7lTn5+BoG/xxYfzW4dKKyLOywsGKVgXHe9fD905AS/Lk180jd1bICEJhebGeiRXEQ2YUPl/xwFg2g==}
     hasBin: true
 
   '@colyseus/timer@1.0.3':
@@ -1889,7 +1892,7 @@ packages:
     resolution: {integrity: sha512-pU4hqQseJaea/yDhGRw8cGx+Q811w/UCdu+otbAJ8RKvCk07/PjX5a2fRe3j7bixv3ar5ygWUTC8c1YTzcPLzw==}
     engines: {node: '>= 20.x'}
     peerDependencies:
-      '@colyseus/schema': ^3.0.0-alpha.0
+      '@colyseus/schema': 1.0.46
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -3371,8 +3374,6 @@ snapshots:
 
   '@colyseus/schema@1.0.46': {}
 
-  '@colyseus/schema@3.0.76': {}
-
   '@colyseus/timer@1.0.3':
     dependencies:
       '@colyseus/clock': 1.0.1
@@ -4824,7 +4825,7 @@ snapshots:
   colyseus.js@0.16.0:
     dependencies:
       '@colyseus/msgpackr': 1.11.2
-      '@colyseus/schema': 3.0.76
+      '@colyseus/schema': 1.0.46
       httpie: 2.0.0-next.13
       tslib: 2.8.1
       ws: 8.19.0
