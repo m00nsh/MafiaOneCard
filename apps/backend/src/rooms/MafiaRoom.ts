@@ -278,6 +278,11 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 }
             }
 
+            // 덱이 비었으면 즉시 보충 (덱이 0장으로 유지되는 것 방지)
+            if (this.deck.length === 0) {
+                this.replenishDeck();
+            }
+
             // 2. 뽑은 카드가 있으면 처리
             if (drawnCards.length > 0) {
                 // 공격 스택 초기화 (카드를 뽑았으므로)
