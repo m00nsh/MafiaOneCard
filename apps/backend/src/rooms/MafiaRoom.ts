@@ -147,3 +147,4 @@ export class MafiaRoom extends Room<GameState> {
         this.state.players.delete(client.sessionId);
     }
 }
+
