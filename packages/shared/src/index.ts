@@ -70,7 +70,7 @@ export const CARD_EFFECTS: Record<CardRank, CardEffect> = {
 // 캐릭터 시스템
 // ============================================================================
 
-export type CharacterId = 
+export type CharacterId =
     | 'merchant'      // 잡상인
     | 'tank'          // 탱커
     | 'thief'         // 도둑
@@ -219,18 +219,18 @@ export const GAME_CONSTANTS = {
     INITIAL_HAND_SIZE: 7, // 게임 시작 시 플레이어당 카드 수
     MAX_HAND_SIZE: 20, // 최대 보유 카드 수 (파산 조건)
     TOTAL_CARDS: 54, // 전체 카드 수 (52장 + 조커 2장)
-    
+
     // 공격 카드 값
     ATTACK_2: 2,
     ATTACK_A: 3,
     ATTACK_JOKER_BLACK: 5,
     ATTACK_JOKER_COLOR: 8,
-    
+
     // 방 관련
     MIN_PLAYERS: 2,
     MAX_PLAYERS: 5,
     ROOM_CODE_LENGTH: 6, // 초대 코드 길이
-    
+
     // 스킬 관련
     TANK_DAMAGE_REDUCTION: 0.5, // 탱커 스킬: 50% 감쇄
     ASSASSIN_CARD_COUNT: 3, // 암살자 스킬: 3장 부여
@@ -270,6 +270,35 @@ export interface EndTurnMessage {
 }
 
 // ============================================================================
+// 에러 처리 시스템
+// ============================================================================
+
+export enum ErrorCode {
+    // 공통 에러
+    INTERNAL_SERVER_ERROR = 1000,
+
+    // 준비 단계 에러
+    NOT_ALL_READY = 2001,
+    INSUFFICIENT_PLAYERS = 2002,
+
+    // 게임 진행 에러
+    NOT_YOUR_TURN = 3001,
+
+    // 유효성 검사 에러
+    INVALID_CARD_SUIT = 4001,
+    INVALID_CARD_RANK = 4002,
+    CARD_NOT_IN_HAND = 4003,
+    MUST_RESPOND_TO_ATTACK = 4004,
+}
+
+export interface ErrorResponse {
+    success: boolean; // false
+    code: ErrorCode;
+    type: string; // ErrorCode 이름 (예: "NOT_YOUR_TURN")
+    message: string;
+}
+
+// ============================================================================
 // 서버 → 클라이언트 메시지 타입
 // ============================================================================
 
@@ -279,14 +308,14 @@ export interface GameStartMessage {
 
 export interface CardPlayResponseMessage {
     success: boolean;
-    error?: string;
+    error?: ErrorResponse; // 표준 에러 객체 (success: false일 때)
     newTopCard?: Card;
     attackStack?: number;
 }
 
 export interface DrawCardResponseMessage {
     success: boolean;
-    error?: string;
+    error?: ErrorResponse; // 표준 에러 객체 (success: false일 때)
     drawnCard?: Card;
 }
 
@@ -303,7 +332,14 @@ export interface AttackMessage {
 
 export interface GameEndMessage {
     winnerId: string;
-    reason: 'hand_empty' | 'burst'; // 승리 이유
+    reason: 'hand_empty' | 'burst' | 'player_left'; // 승리 이유
+    stats: {
+        [sessionId: string]: {
+            remainingCards: number;
+            rank: number;
+            isWinner: boolean;
+        }
+    };
 }
 
 export interface SkillUsedMessage {

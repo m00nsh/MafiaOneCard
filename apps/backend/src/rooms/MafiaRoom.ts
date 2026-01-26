@@ -1,5 +1,5 @@
 import { Room, Client } from "colyseus";
-import { Card, CardSuit, CardRank, CardSchema, PlayerSchema, GameStateSchema, GAME_CONSTANTS } from "@mafia/shared";
+import { Card, CardSuit, CardRank, CardSchema, PlayerSchema, GameStateSchema, GAME_CONSTANTS, ErrorCode } from "@mafia/shared";
 
 export class MafiaRoom extends Room<GameStateSchema> {
     // 서버만 알고 있어야 하는 정보 (보안을 위해 Schema 밖에서 관리)
@@ -38,30 +38,38 @@ export class MafiaRoom extends Room<GameStateSchema> {
             }
 
             const card = player.hand[cardIndex];
-            
+
             // 턴 검증: 내 턴인지 확인
             if (this.state.currentTurn !== client.sessionId) {
                 console.warn(`${client.sessionId}: 내 턴이 아닙니다. 현재 턴: ${this.state.currentTurn}`);
                 client.send("card_play_response", {
                     success: false,
-                    error: "내 턴이 아닙니다.",
+                    error: {
+                        code: ErrorCode.NOT_YOUR_TURN,
+                        type: "NOT_YOUR_TURN",
+                        message: `지금은 당신의 차례가 아닙니다. (현재 턴: ${this.state.currentTurn})`,
+                    },
                 });
                 return;
             }
 
             // 공격 스택이 있을 때는 공격 카드만 낼 수 있음 (카드 제거 전에 검증)
             if (this.state.attackStack > 0) {
-                const isAttackCard = 
+                const isAttackCard =
                     card.rank === 'A' ||
                     card.rank === '2' ||
                     (card.suit === 'JOKER' && card.rank === 'BLACK') ||
                     (card.suit === 'JOKER' && card.rank === 'COLOR');
-                
+
                 if (!isAttackCard) {
                     console.warn(`${client.sessionId}: 공격 스택이 있을 때는 공격 카드만 낼 수 있습니다.`);
                     client.send("card_play_response", {
                         success: false,
-                        error: `공격 스택이 쌓여있습니다. 공격 카드(A, 2, 조커)만 낼 수 있습니다. (현재 스택: ${this.state.attackStack})`,
+                        error: {
+                            code: ErrorCode.MUST_RESPOND_TO_ATTACK,
+                            type: "MUST_RESPOND_TO_ATTACK",
+                            message: `방어 실패! 현재 ${this.state.attackStack}장의 공격이 들어왔습니다. 공격 카드(A, 2, 조커)를 내야 합니다.`,
+                        },
                     });
                     return;
                 }
@@ -70,19 +78,23 @@ export class MafiaRoom extends Room<GameStateSchema> {
             // 카드 유효성 검사 (간단한 버전 - 향후 개선 필요)
             const topCard = this.state.topCard;
             if (topCard && topCard.id !== "") {
-                const canPlay = 
+                const canPlay =
                     card.suit === topCard.suit ||
                     card.rank === topCard.rank ||
                     card.suit === 'JOKER' ||
                     topCard.suit === 'JOKER' ||
                     (this.state.selectedSuit && card.suit === this.state.selectedSuit); // 7카드 문양 변경 반영
-                
+
                 if (!canPlay) {
                     console.warn(`${client.sessionId}: 카드를 낼 수 없습니다.`);
                     // 실패 응답 전송
                     client.send("card_play_response", {
                         success: false,
-                        error: "카드를 낼 수 없습니다. 문양이나 숫자가 일치하지 않습니다.",
+                        error: {
+                            code: ErrorCode.INVALID_CARD_SUIT, // 편의상 Suit 불일치로 통일 (또는 로직에 따라 구분 가능)
+                            type: "INVALID_CARD_SUIT",
+                            message: `낼 수 없는 카드입니다. (현재 바닥: ${topCard.suit} ${topCard.rank})`,
+                        },
                     });
                     return;
                 }
@@ -104,7 +116,7 @@ export class MafiaRoom extends Room<GameStateSchema> {
             let shouldSkipTurn = false; // J 카드: 다음 플레이어 스킵
             let shouldReverse = false; // Q 카드: 방향 전환
             let shouldKeepTurn = false; // K 카드: 한 장 더 내기 (턴 유지)
-            
+
             // 공격 카드 처리
             if (card.rank === 'A') {
                 this.state.attackStack += GAME_CONSTANTS.ATTACK_A;
@@ -138,32 +150,69 @@ export class MafiaRoom extends Room<GameStateSchema> {
             this.state.deckCount = this.deck.length;
 
             console.log(`${client.sessionId}님이 카드를 냈습니다:`, card.id);
-            
+
             // 게임 종료 확인 (핸드가 비어있으면 승리)
             if (player.hand.length === 0) {
                 this.state.status = "ENDED";
                 this.state.winnerId = client.sessionId;
                 console.log(`게임 종료! 승자: ${client.sessionId}`);
+
+                // 랭킹 계산
+                const stats: any = {};
+                const playerIds = Array.from(this.state.players.keys());
+                const currentTurnIndex = playerIds.indexOf(this.state.currentTurn); // 종료 시점의 턴 (승자)
+
+                // 1. 모든 플레이어 정보 수집
+                const playersData = playerIds.map(id => {
+                    const p = this.state.players.get(id);
+                    return {
+                        id,
+                        handCount: p ? p.hand.length : 0,
+                        isWinner: id === client.sessionId,
+                        // 현재 턴(승자)으로부터의 거리 계산 (방향 고려)
+                        // 턴이 가까울수록(먼저 올수록) 우선순위 높음
+                        turnDistance: this.getTurnDistance(playerIds, currentTurnIndex, id)
+                    };
+                });
+
+                // 2. 정렬 로직 (1순위: 카드 수 오름차순, 2순위: 턴 거리 오름차순)
+                playersData.sort((a, b) => {
+                    if (a.handCount !== b.handCount) {
+                        return a.handCount - b.handCount;
+                    }
+                    return a.turnDistance - b.turnDistance;
+                });
+
+                // 3. 랭킹 부여 및 stats 생성
+                playersData.forEach((p, index) => {
+                    stats[p.id] = {
+                        remainingCards: p.handCount,
+                        rank: index + 1,
+                        isWinner: p.isWinner
+                    };
+                });
+
                 this.broadcast("game_end", {
                     winnerId: client.sessionId,
                     reason: 'hand_empty',
+                    stats: stats
                 });
             }
-            
+
             // 턴 전환 (K 카드는 턴 유지)
             if (!shouldKeepTurn) {
                 this.nextTurn(shouldSkipTurn);
             } else {
                 console.log(`${client.sessionId}: K 카드로 인해 턴 유지 (한 장 더 내기)`);
             }
-            
+
             // 성공 응답 전송
             client.send("card_play_response", {
                 success: true,
                 newTopCard: { id: card.id, suit: card.suit, rank: card.rank },
                 attackStack: this.state.attackStack,
             });
-            
+
             // 모든 플레이어에게 알림 방송
             this.broadcast("announcement", `${client.sessionId}님이 카드를 냈습니다!`);
         });
@@ -180,7 +229,11 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 console.warn(`${client.sessionId}: 내 턴이 아닙니다.`);
                 client.send("draw_card_response", {
                     success: false,
-                    error: "내 턴이 아닙니다.",
+                    error: {
+                        code: ErrorCode.NOT_YOUR_TURN,
+                        type: "NOT_YOUR_TURN",
+                        message: "내 턴이 아닙니다.",
+                    },
                 });
                 return;
             }
@@ -218,20 +271,29 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 // 덱 카드 수 업데이트
                 this.state.deckCount = this.deck.length;
                 console.log(`${client.sessionId}님이 ${drawnCards.length}장의 카드를 뽑았습니다.`);
-                
+
                 // 턴 전환 (카드를 뽑았으므로 다음 플레이어로)
                 this.nextTurn(false);
-                
+
                 // 성공 응답 전송
                 client.send("draw_card_response", {
                     success: true,
                     drawnCard: { id: drawnCards[0].id, suit: drawnCards[0].suit, rank: drawnCards[0].rank },
                 });
+
+                // 파산 확인 (카드 뽑은 후 핸드 > 20)
+                if (player.hand.length > GAME_CONSTANTS.MAX_HAND_SIZE) {
+                    this.handlePlayerElimination(client, 'burst');
+                }
             } else {
                 // 덱이 비어있을 때 실패 응답
                 client.send("draw_card_response", {
                     success: false,
-                    error: "덱에 카드가 없습니다.",
+                    error: {
+                        code: ErrorCode.INTERNAL_SERVER_ERROR, // 덱 부족은 서버 로직상 처리되어야 하므로 내부 에러로 간주하거나 별도 코드 정의 필요
+                        type: "INTERNAL_SERVER_ERROR",
+                        message: "덱에 카드가 없습니다.",
+                    },
                 });
             }
         });
@@ -326,6 +388,21 @@ export class MafiaRoom extends Room<GameStateSchema> {
         console.log(`턴 전환: ${this.state.currentTurn} (방향: ${this.state.direction})`);
     }
 
+    // 현재 턴(기준)으로부터 target 플레이어까지의 거리 계산
+    getTurnDistance(allPlayers: string[], currentIndex: number, targetId: string): number {
+        const targetIndex = allPlayers.indexOf(targetId);
+        if (targetIndex === -1) return 999;
+
+        const total = allPlayers.length;
+        if (this.state.direction === 'clockwise') {
+            // 시계 방향 거리: (Target - Current + Total) % Total
+            return (targetIndex - currentIndex + total) % total;
+        } else {
+            // 반시계 방향 거리: (Current - Target + Total) % Total
+            return (currentIndex - targetIndex + total) % total;
+        }
+    }
+
     // 1. 54장의 카드 생성 (A~K x 4무늬 + 조커 2장)
     createDeck() {
         const suits: CardSuit[] = ['SPADE', 'HEART', 'DIAMOND', 'CLUB'];
@@ -387,8 +464,83 @@ export class MafiaRoom extends Room<GameStateSchema> {
 
     // 플레이어가 나갔을 때
     onLeave(client: Client, consented: boolean) {
-        console.log(`${client.sessionId}님이 떠났습니다.`);
+        if (this.state.status === "PLAYING") {
+            this.handlePlayerElimination(client, 'player_left');
+        } else {
+            console.log(`${client.sessionId}님이 떠났습니다.`);
+            this.state.players.delete(client.sessionId);
+        }
+    }
+
+    // 플레이어 탈락 처리 (나가기, 파산 등)
+    handlePlayerElimination(client: Client, reason: 'burst' | 'player_left') {
+        const player = this.state.players.get(client.sessionId);
+        if (!player) return;
+
+        console.log(`${client.sessionId}님이 탈락했습니다. 사유: ${reason}`);
+
+        // 1. 턴 넘김 처리 (나가는 사람이 현재 턴이라면)
+        if (this.state.currentTurn === client.sessionId) {
+            console.log("현재 턴 플레이어 탈락, 턴을 넘깁니다.");
+            this.nextTurn(false);
+        }
+
+        // 2. 랭킹 계산 (현재 인원수 = 탈락자 등수)
+        const rank = this.state.players.size;
+        const stats: any = {
+            [client.sessionId]: {
+                remainingCards: player.hand.length,
+                rank: rank,
+                isWinner: false
+            }
+        };
+
+        // 3. 카드 반납 및 덱 셔플
+        if (player.hand.length > 0) {
+            player.hand.forEach(card => {
+                this.deck.push({ id: card.id, suit: card.suit, rank: card.rank });
+            });
+            this.shuffleDeck();
+            this.state.deckCount = this.deck.length;
+            console.log(`탈락자 카드 ${player.hand.length}장 덱 반환 완료.`);
+        }
+
+        // 4. 탈락자에게 개별 통지 (게임 종료 메시지 형식 활용)
+        client.send("game_end", {
+            winnerId: "", // 승자 없음 (개별 탈락)
+            reason: reason,
+            stats: stats
+        });
+
+        // 5. 플레이어 제거 및 알림
         this.state.players.delete(client.sessionId);
+        this.broadcast("announcement", {
+            message: `${player.nickname || client.sessionId}님이 ${reason === 'burst' ? '파산' : '퇴장'}하여 탈락했습니다.`,
+            type: "warning"
+        });
+
+        // 6. 남은 인원이 1명이면 게임 종료 (마지막 생존자 승리)
+        if (this.state.players.size === 1) {
+            const winnerId = Array.from(this.state.players.keys())[0];
+            this.state.status = "ENDED";
+            this.state.winnerId = winnerId;
+
+            // 승자 stats 생성
+            const winnerStats: any = {
+                [winnerId]: {
+                    remainingCards: this.state.players.get(winnerId)?.hand.length || 0,
+                    rank: 1,
+                    isWinner: true
+                }
+            };
+
+            console.log(`최후의 1인 승리: ${winnerId}`);
+            this.broadcast("game_end", {
+                winnerId: winnerId,
+                reason: 'hand_empty', // 생존 승리도 일반 승리와 동일하게 처리하거나 별도 코드로 구분 가능
+                stats: winnerStats
+            });
+        }
     }
 }
 
