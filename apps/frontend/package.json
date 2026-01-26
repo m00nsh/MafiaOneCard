@@ -8,7 +8,7 @@
         "dev": "vite"
     },
     "dependencies": {
-        "@colyseus/schema": "1.0.46",
+        "@colyseus/schema": "^3.0.0-alpha.36",
         "@emotion/react": "11.14.0",
         "@emotion/styled": "11.14.1",
         "@mafia/shared": "workspace:*",
@@ -83,11 +83,6 @@
         },
         "react-dom": {
             "optional": true
-        }
-    },
-    "pnpm": {
-        "overrides": {
-            "@colyseus/schema": "1.0.46"
         }
     }
 }

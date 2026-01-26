@@ -26,9 +26,9 @@ export interface Card {
 
 // Schema v3: Card 클래스 (Colyseus 동기화용)
 export class CardSchema extends Schema implements Card {
-    @type("string") id: string;
-    @type("string") suit: CardSuit;
-    @type("string") rank: CardRank;
+    @type("string") id!: string;
+    @type("string") suit!: CardSuit;
+    @type("string") rank!: CardRank;
 
     constructor(id?: string, suit?: CardSuit, rank?: CardRank) {
         super();
