@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import PlayingCard from '@/app/components/PlayingCard';
 import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
-import { Card } from '@/app/utils/gameLogic';
+import { Card, createDeck } from '@/app/utils/gameLogic';
 
 // Mock Data Types
 interface Player {
@@ -156,41 +156,111 @@ const OpponentProfile = ({ player, isTurn }: { player: Player; isTurn: boolean }
   );
 };
 
-export default function GameScreen({ }: GameScreenProps) {
+// Helper to generate mock opponents based on player count
+const generateMockOpponents = (totalPlayers: number): Player[] => {
+  const opponents: Player[] = [];
+
+  // Distribution logic based on user request:
+  // 2 Players (1 Opp): Left
+  // 3 Players (2 Opp): Left, Right
+  // 4 Players (3 Opp): Left (2), Right (1)
+  // 5 Players (4 Opp): Left (2), Right (2) - Standard fallback
+
+  const positions: Player['position'][] = [];
+  if (totalPlayers === 2) {
+    positions.push('left-top');
+  } else if (totalPlayers === 3) {
+    positions.push('left-top', 'right-top');
+  } else if (totalPlayers === 4) {
+    positions.push('left-top', 'left-bottom', 'right-top');
+  } else {
+    // 5+ Players (Default to 5 max)
+    positions.push('left-top', 'left-bottom', 'right-top', 'right-bottom');
+  }
+
+  positions.forEach((pos, index) => {
+    opponents.push({
+      id: `op${index + 1}`,
+      name: `Player ${index + 1}`,
+      character: '캐릭터', // Placeholder
+      cardCount: 5 + index, // Varied card counts
+      position: pos
+    });
+  });
+
+  return opponents;
+};
+
+export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
   // Mock State
   const myId = 'me';
   const [turnPlayerId, setTurnPlayerId] = useState<string>(myId); // start with my turn
+  const opponents = generateMockOpponents(playerCount);
 
   const isMyTurn = turnPlayerId === myId;
+  const [sortMode, setSortMode] = useState<'none' | 'suit' | 'rank'>('none');
 
-  const [myHand, setMyHand] = useState<Card[]>([
-    { id: 'c1', suit: 'spades', rank: 'A' },
-    { id: 'c2', suit: 'diamonds', rank: 'K' },
-    { id: 'c3', suit: 'hearts', rank: 'Q' },
-    { id: 'c4', suit: 'clubs', rank: 'A' },
-    { id: 'c5', suit: 'spades', rank: 'K' },
-    { id: 'c6', suit: 'diamonds', rank: 'Q' },
-    { id: 'c7', suit: 'hearts', rank: 'A' },
-    { id: 'c8', suit: 'clubs', rank: 'K' },
-    { id: 'c9', suit: 'spades', rank: 'Q' },
-  ]);
+  const [myHand, setMyHand] = useState<Card[]>(() => {
+    // Initialize with 7 random cards from a fresh deck
+    const deck = createDeck();
+    return deck.slice(0, 7);
+  });
 
   const [topCard, setTopCard] = useState<Card>({ id: 'top', suit: 'clubs', rank: 'A' });
   const [deckCount, setDeckCount] = useState(25);
   const [attackStack, setAttackStack] = useState(8);
+  // Log attackStack to prevent unused variable lint error
+  console.log("Current attack stack:", attackStack);
   const [direction, setDirection] = useState<'clockwise' | 'counter-clockwise'>('clockwise');
 
   // Mock Skill State
   const maxSkillCooldown = 3;
   const currentSkillCharge = 1;
 
-  // Mock Opponents
-  const opponents: Player[] = [
-    { id: 'op1', name: 'Nickname C', character: '캐릭터', cardCount: 6, position: 'left-top' },
-    { id: 'op2', name: 'Nickname E', character: '캐릭터', cardCount: 7, position: 'left-bottom' },
-    { id: 'op3', name: 'Nickname D', character: '캐릭터', cardCount: 5, position: 'right-top' },
-    { id: 'op4', name: 'Nickname A', character: '캐릭터', cardCount: 8, position: 'right-bottom' },
-  ];
+  // Sorting Logic Helpers
+  const SUIT_ORDER: Record<string, number> = { 'spades': 0, 'diamonds': 1, 'hearts': 2, 'clubs': 3, 'joker': 4 };
+  const RANK_ORDER: Record<string, number> = {
+    'A': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6, '8': 7, '9': 8, '10': 9, 'J': 10, 'Q': 11, 'K': 12,
+    'JOKER_BW': 13, 'JOKER_COLOR': 14
+  };
+
+  const getSortComparator = (mode: 'suit' | 'rank') => (a: Card, b: Card) => {
+    const getSuitVal = (c: Card) => SUIT_ORDER[c.suit] ?? 99;
+    const getRankVal = (c: Card) => RANK_ORDER[c.rank] ?? 99;
+
+    if (mode === 'suit') {
+      const sA = getSuitVal(a);
+      const sB = getSuitVal(b);
+      if (sA !== sB) return sA - sB;
+      return getRankVal(a) - getRankVal(b);
+    } else {
+      // Rank -> Suit
+      const rA = getRankVal(a);
+      const rB = getRankVal(b);
+      if (rA !== rB) return rA - rB;
+      return getSuitVal(a) - getSuitVal(b);
+    }
+  };
+
+  const sortHand = (mode: 'suit' | 'rank') => {
+    setMyHand(prev => [...prev].sort(getSortComparator(mode)));
+  };
+
+  const handleToggleSort = () => {
+    setSortMode(prev => {
+      if (prev === 'none') {
+        sortHand('suit');
+        return 'suit';
+      }
+      if (prev === 'suit') {
+        sortHand('rank');
+        return 'rank';
+      }
+      // rank -> none
+      return 'none';
+      // Note: 'none' doesn't un-sort, just enables manual drag (future DnD)
+    });
+  };
 
   // Logic placeholders
   const handlePlayCard = (index: number) => {
@@ -216,12 +286,50 @@ export default function GameScreen({ }: GameScreenProps) {
     if (!isMyTurn) return;
 
     // In real app, emit draw event
-    setMyHand(prev => [...prev, { id: `draw-${Date.now()}`, suit: 'joker', rank: 'JOKER_BW', isJoker: true }]); // Dummy draw
+    // Draw a random card from a fresh shuffled deck for testing
+    const newDeck = createDeck();
+    const drawnCard = newDeck[0];
+
+    // Ensure unique ID for React keys
+    const cardWithUniqueId = { ...drawnCard, id: `draw-${Date.now()}` };
+
+    setMyHand(prev => {
+      const newHand = [...prev, cardWithUniqueId];
+      if (sortMode !== 'none') {
+        newHand.sort(getSortComparator(sortMode));
+      }
+      return newHand;
+    });
 
     // Mock Turn Change (End turn after draw)
     setTurnPlayerId('op1');
     setTimeout(() => setTurnPlayerId(myId), 2000);
   };
+
+  // Dynamic Hand Spacing Logic
+  const calculateOverlap = () => {
+    const CARD_WIDTH = 80; // Correct width (w-20 = 5rem = 80px)
+    const CONTAINER_MAX_WIDTH = 760; // Max width for hand area (widened from 600)
+
+    if (myHand.length <= 1) return 0;
+
+    // Default overlap: ~40px (showing 40px strip per card)
+    const STANDARD_OVERLAP = 40;
+    const standardTotalWithOverlap = CARD_WIDTH + (myHand.length - 1) * (CARD_WIDTH - STANDARD_OVERLAP);
+
+    if (standardTotalWithOverlap <= CONTAINER_MAX_WIDTH) {
+      return STANDARD_OVERLAP;
+    }
+
+    // If it exceeds, calculate needed overlap to squeeze EXACTLY into MAX_WIDTH
+    // MaxWidth = CardWidth + (N-1) * (CardWidth - Overlap)
+    // Overlap = CardWidth - ((MaxWidth - CardWidth) / (N-1))
+    const requiredOverlap = CARD_WIDTH - ((CONTAINER_MAX_WIDTH - CARD_WIDTH) / (myHand.length - 1));
+    return Math.max(0, requiredOverlap);
+  };
+
+  const overlapPx = calculateOverlap();
+
 
   return (
     <LandscapeLayout>
@@ -286,18 +394,32 @@ export default function GameScreen({ }: GameScreenProps) {
         {/* Bottom Area: Controls & Hand */}
         <div className="w-full flex items-end justify-between gap-4 mt-auto mb-2 relative">
           {/* Sort Button (Left) */}
-          <button className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-4 rounded-xl text-xl font-bold shadow-lg transition-transform hover:scale-105 min-w-[120px]">
-            정렬 꺼짐
-          </button>
+          <div className="flex flex-col justify-end w-[160px] shrink-0">
+            <button
+              onClick={handleToggleSort}
+              className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-4 rounded-xl text-xl font-bold shadow-lg transition-transform hover:scale-105 w-full whitespace-nowrap"
+            >
+              {sortMode === 'none' && 'Sort: Off'}
+              {sortMode === 'suit' && 'Sort: Suit'}
+              {sortMode === 'rank' && 'Sort: Rank'}
+            </button>
+          </div>
 
           {/* Hand Cards (Center) */}
-          <div className="flex-1 flex justify-center items-end -space-x-8 hover:space-x-1 transition-all duration-300 pb-4">
+          <div className="flex-1 flex justify-center items-end transition-all duration-300 pb-4 max-w-[760px] mx-auto min-h-[120px]">
             {myHand.map((card, index) => {
               // Simple playable logic: Match Suit or Rank or if card is Joker
               // AND it must be my turn
               const isPlayable = isMyTurn && (card.suit === topCard.suit || card.rank === topCard.rank || card.isJoker);
               return (
-                <div key={index} className="relative transition-all duration-300 hover:-translate-y-6 hover:z-50">
+                <div
+                  key={index}
+                  className="relative transition-all duration-300 hover:-translate-y-6 hover:z-50"
+                  style={{
+                    marginLeft: index === 0 ? 0 : `-${overlapPx}px`,
+                    zIndex: index
+                  }}
+                >
                   <PlayingCard
                     card={card}
                     isPlayable={isPlayable}
@@ -310,8 +432,8 @@ export default function GameScreen({ }: GameScreenProps) {
           </div>
 
           {/* Skill Button (Right) */}
-          <div className="flex flex-col gap-2 items-end min-w-[120px]">
-            <button className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-8 rounded-xl text-xl font-bold shadow-lg transition-transform hover:scale-105 w-full">
+          <div className="flex flex-col gap-2 items-end min-w-[120px] shrink-0">
+            <button className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-8 rounded-xl text-xl font-bold shadow-lg transition-transform hover:scale-105 w-full whitespace-nowrap">
               능력 사용하기
             </button>
             <div className="bg-black/40 rounded-lg h-6 w-full overflow-hidden border border-white/30 flex">
