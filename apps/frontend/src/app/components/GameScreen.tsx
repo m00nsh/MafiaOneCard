@@ -215,7 +215,7 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
 
   // Mock Skill State
   const maxSkillCooldown = 3;
-  const currentSkillCharge = 1;
+  const [currentSkillCharge, setCurrentSkillCharge] = useState(1);
 
   // Sorting Logic Helpers
   const SUIT_ORDER: Record<string, number> = { 'spades': 0, 'diamonds': 1, 'hearts': 2, 'clubs': 3, 'joker': 4 };
@@ -433,9 +433,31 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
 
           {/* Skill Button (Right) */}
           <div className="flex flex-col gap-2 items-end min-w-[120px] shrink-0">
-            <button className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-8 rounded-xl text-xl font-bold shadow-lg transition-transform hover:scale-105 w-full whitespace-nowrap">
-              능력 사용하기
-            </button>
+            {(() => {
+              const isSkillReady = isMyTurn && currentSkillCharge >= maxSkillCooldown;
+              return (
+                <button
+                  onClick={() => {
+                    if (isSkillReady) {
+                      // Use Skill Logic (Mock)
+                      console.log("Skill Used!");
+                      setCurrentSkillCharge(0);
+                    } else {
+                      // Test Logic: Charge Up
+                      setCurrentSkillCharge(prev => Math.min(maxSkillCooldown, prev + 1));
+                    }
+                  }}
+                  className={`px-6 py-8 rounded-xl text-xl font-bold shadow-lg transition-all w-full whitespace-nowrap
+                    ${isSkillReady
+                      ? 'bg-purple-600 hover:bg-purple-500 text-white hover:scale-105 cursor-pointer'
+                      : 'bg-gray-600/50 text-gray-400 cursor-not-allowed grayscale'
+                    }
+                  `}
+                >
+                  능력 사용하기
+                </button>
+              );
+            })()}
             <div className="bg-black/40 rounded-lg h-6 w-full overflow-hidden border border-white/30 flex">
               {/* Segmented Cooldown Bar */}
               {Array.from({ length: maxSkillCooldown }).map((_, i) => {
