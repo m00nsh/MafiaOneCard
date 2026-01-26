@@ -418,6 +418,26 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   // 게임 종료 통계 창 상태
   const [showStatsDialog, setShowStatsDialog] = useState(false);
   const [gameEndData, setGameEndData] = useState<{ myRank: number; winnerId: string; reason: string } | null>(null);
+  
+  // 서버 연결 중 로딩 애니메이션 상태
+  const [loadingDots, setLoadingDots] = useState(1);
+  
+  // 서버 연결 중 '.' 애니메이션 (0.333초마다 1개 → 2개 → 3개 → 1개 순환)
+  useEffect(() => {
+    if (status !== 'connecting') {
+      setLoadingDots(1); // 연결이 끝나면 초기화
+      return;
+    }
+    
+    const interval = setInterval(() => {
+      setLoadingDots(prev => {
+        if (prev >= 3) return 1;
+        return prev + 1;
+      });
+    }, 333); // 0.333초 = 333ms
+    
+    return () => clearInterval(interval);
+  }, [status]);
 
   // Sorting Logic Helpers
   const SUIT_ORDER: Record<string, number> = { 'spades': 0, 'diamonds': 1, 'hearts': 2, 'clubs': 3, 'joker': 4 };
@@ -579,6 +599,17 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
 
   return (
     <LandscapeLayout>
+      {/* 서버 연결 중 로딩 오버레이 */}
+      {status === 'connecting' && (
+        <div className="fixed inset-0 bg-black/70 z-[9999] flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-white text-2xl sm:text-3xl font-bold">
+              서버에 연결 중{'.'.repeat(loadingDots)}
+            </p>
+          </div>
+        </div>
+      )}
+      
       <div className="size-full relative p-4 sm:p-8 flex flex-col justify-between">
         {/* Connection Status Indicator */}
         <div className="absolute top-2 right-2 z-50 flex items-center gap-2">
