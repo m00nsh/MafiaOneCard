@@ -135,13 +135,16 @@ const TurnDirectionIndicator = ({ direction }: { direction: 'clockwise' | 'count
 };
 
 // Helper component for Opponent
-const OpponentProfile = ({ player }: { player: Player }) => {
+const OpponentProfile = ({ player, isTurn }: { player: Player; isTurn: boolean }) => {
   const isLeft = player.position.includes('left');
 
   return (
     <div className={`flex items-center gap-4 ${isLeft ? 'flex-row' : 'flex-row-reverse'}`}>
       {/* Info Box */}
-      <div className="bg-gray-300 rounded-lg p-4 min-w-[140px] sm:min-w-[160px] shadow-lg relative z-[100]">
+      <div className={`bg-gray-300 rounded-lg p-4 min-w-[140px] sm:min-w-[160px] shadow-lg relative z-[100] transition-all duration-300
+        ${isTurn ? 'border-4 border-yellow-400 scale-105' : ''}
+        ${!isLeft ? 'text-right' : ''}
+      `}>
         <p className="text-gray-900 font-bold text-lg sm:text-xl truncate">{player.name}</p>
         <p className="text-gray-600 text-sm sm:text-base">{`{${player.character}}`}</p>
         <p className="text-blue-600 font-bold mt-1">카드: {player.cardCount}장</p>
@@ -155,6 +158,11 @@ const OpponentProfile = ({ player }: { player: Player }) => {
 
 export default function GameScreen({ }: GameScreenProps) {
   // Mock State
+  const myId = 'me';
+  const [turnPlayerId, setTurnPlayerId] = useState<string>(myId); // start with my turn
+
+  const isMyTurn = turnPlayerId === myId;
+
   const [myHand, setMyHand] = useState<Card[]>([
     { id: 'c1', suit: 'spades', rank: 'A' },
     { id: 'c2', suit: 'diamonds', rank: 'K' },
@@ -186,21 +194,33 @@ export default function GameScreen({ }: GameScreenProps) {
 
   // Logic placeholders
   const handlePlayCard = (index: number) => {
+    if (!isMyTurn) return; // Prevent playing if not my turn
+
     // In real app, emit socket event
     const card = myHand[index];
     setTopCard(card);
     setMyHand(prev => prev.filter((_, i) => i !== index));
-    setDeckCount(prev => prev - 1); // Discard pile grows
+    setDeckCount(prev => prev + 1); // Discard pile grows
 
     // Mock: Playing 'Q' toggles direction
     if (card.rank === 'Q') {
       setDirection(prev => prev === 'clockwise' ? 'counter-clockwise' : 'clockwise');
     }
+
+    // Mock Turn Change
+    setTurnPlayerId('op1');
+    setTimeout(() => setTurnPlayerId(myId), 2000); // Back to me after 2s
   };
 
   const handleDrawCard = () => {
+    if (!isMyTurn) return;
+
     // In real app, emit draw event
     setMyHand(prev => [...prev, { id: `draw-${Date.now()}`, suit: 'joker', rank: 'JOKER_BW', isJoker: true }]); // Dummy draw
+
+    // Mock Turn Change (End turn after draw)
+    setTurnPlayerId('op1');
+    setTimeout(() => setTurnPlayerId(myId), 2000);
   };
 
   return (
@@ -214,14 +234,14 @@ export default function GameScreen({ }: GameScreenProps) {
           {/* Left Column */}
           <div className="flex flex-col gap-8 sm:gap-12 pl-4 sm:pl-12">
             {opponents.filter(p => p.position.startsWith('left')).map(p => (
-              <OpponentProfile key={p.id} player={p} />
+              <OpponentProfile key={p.id} player={p} isTurn={turnPlayerId === p.id} />
             ))}
           </div>
 
           {/* Right Column */}
           <div className="flex flex-col gap-8 sm:gap-12 pr-4 sm:pr-12">
             {opponents.filter(p => p.position.startsWith('right')).map(p => (
-              <OpponentProfile key={p.id} player={p} />
+              <OpponentProfile key={p.id} player={p} isTurn={turnPlayerId === p.id} />
             ))}
           </div>
         </div>
@@ -234,7 +254,10 @@ export default function GameScreen({ }: GameScreenProps) {
             role="button"
             tabIndex={0}
             onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleDrawCard()}
-            className="cursor-pointer flex flex-col items-center gap-2"
+            className={`cursor-pointer flex flex-col items-center gap-2 transition-all duration-300 rounded-lg p-2
+              ${isMyTurn ? 'border-2 border-yellow-400 bg-yellow-400/10 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : 'border-2 border-transparent'}
+              ${!isMyTurn ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:scale-105'}
+            `}
           >
             <PlayingCard
               card={{ id: 'deck-top', suit: 'joker', rank: 'JOKER_BW' }}
@@ -271,7 +294,8 @@ export default function GameScreen({ }: GameScreenProps) {
           <div className="flex-1 flex justify-center items-end -space-x-8 hover:space-x-1 transition-all duration-300 pb-4">
             {myHand.map((card, index) => {
               // Simple playable logic: Match Suit or Rank or if card is Joker
-              const isPlayable = card.suit === topCard.suit || card.rank === topCard.rank || card.isJoker;
+              // AND it must be my turn
+              const isPlayable = isMyTurn && (card.suit === topCard.suit || card.rank === topCard.rank || card.isJoker);
               return (
                 <div key={index} className="relative transition-all duration-300 hover:-translate-y-6 hover:z-50">
                   <PlayingCard
