@@ -117,9 +117,12 @@ export class MafiaRoom extends Room<GameStateSchema> {
             const newTopCard = new CardSchema(card.id, card.suit, card.rank);
             this.state.topCard = newTopCard;
 
-            // 7 카드 사용 시 문양 변경
+            // 7 카드 사용 시 문양 변경, 그 외에는 초기화
             if (message.selectedSuit && card.rank === '7') {
                 this.state.selectedSuit = message.selectedSuit;
+            } else {
+                // 7 카드가 아닌 카드를 내면 selectedSuit 초기화
+                this.state.selectedSuit = "";
             }
 
             // 카드 효과 처리
