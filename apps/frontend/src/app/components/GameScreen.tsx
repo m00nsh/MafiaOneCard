@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import PlayingCard from '@/app/components/PlayingCard';
 import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
 import { Card } from '@/app/utils/gameLogic'; // UICard 타입
 import { useColyseusRoom } from '@/app/hooks/useColyseusRoom';
 import { DEBUG } from '@/app/config/server';
+import { cardFromUI } from '@/app/utils/cardConverter';
+import { CardPlayMessage, DrawCardMessage, CardPlayResponseMessage, DrawCardResponseMessage, CardSuit, GameEndMessage } from '@mafia/shared';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/app/components/ui/dialog';
 // Note: createDeck은 서버에서 처리하므로 제거됨
 
 // Mock Data Types
@@ -194,9 +197,9 @@ const generateMockOpponents = (totalPlayers: number): Player[] => {
   return opponents;
 };
 
-export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
+export default function GameScreen({ playerCount: initialPlayerCount = 4 }: GameScreenProps) {
   // Colyseus 연결
-  const { status, sessionId, gameState, connect, error } = useColyseusRoom();
+  const { status, sessionId, gameState, connect, error, sendMessage, onMessage } = useColyseusRoom();
 
   // 컴포넌트 마운트 시 자동 연결
   useEffect(() => {
@@ -205,39 +208,141 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
     // 언마운트 시 연결 해제는 useColyseusRoom 내부에서 처리됨
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Mock State
-  const myId = sessionId || 'me'; // 서버에서 받은 sessionId 사용
-  const [turnPlayerId, setTurnPlayerId] = useState<string>(myId); // start with my turn
-  const opponents = generateMockOpponents(playerCount);
+  // 서버 응답 메시지 리스너 등록
+  useEffect(() => {
+    if (!onMessage) return;
+    
+    // 카드 내기 응답 처리
+    onMessage<CardPlayResponseMessage>('card_play_response', (response) => {
+      if (response.success) {
+        if (DEBUG) {
+          console.log('[GameScreen] 카드 내기 성공:', response);
+        }
+        // 상태 동기화로 자동 업데이트됨
+      } else {
+        console.error('[GameScreen] 카드 내기 실패:', response.error);
+        // TODO: 사용자에게 에러 메시지 표시 (토스트 등)
+      }
+    });
+    
+    // 카드 뽑기 응답 처리
+    onMessage<DrawCardResponseMessage>('draw_card_response', (response) => {
+      if (response.success) {
+        if (DEBUG) {
+          console.log('[GameScreen] 카드 뽑기 성공:', response);
+        }
+        // 상태 동기화로 자동 업데이트됨
+      } else {
+        console.error('[GameScreen] 카드 뽑기 실패:', response.error);
+        // TODO: 사용자에게 에러 메시지 표시 (토스트 등)
+      }
+    });
 
-  const isMyTurn = turnPlayerId === myId;
+    // 게임 종료 메시지 처리
+    onMessage<GameEndMessage>('game_end', (message) => {
+      console.log('[GameScreen] 게임 종료:', message);
+      // TODO: 게임 종료 화면 표시
+      const currentMyId = sessionId || 'me';
+      if (message.winnerId === currentMyId) {
+        alert('🎉 승리했습니다!');
+      } else {
+        alert(`게임 종료! 승자: ${message.winnerId}`);
+      }
+    });
+  }, [onMessage, sessionId]);
+
+  // 서버 상태에서 데이터 가져오기 (없으면 Mock 데이터 사용)
+  const myId = sessionId || 'me';
   const [sortMode, setSortMode] = useState<'none' | 'suit' | 'rank'>('none');
 
-  const [myHand, setMyHand] = useState<Card[]>(() => {
-    // TODO: 서버에서 받은 카드로 초기화 (현재는 Mock 데이터)
-    // 게임 시작 시 서버에서 분배된 카드를 받아서 설정
-    // 임시 Mock 데이터 (서버 연동 후 제거)
-    return [
-      { id: 'mock-1', suit: 'hearts', rank: 'A' },
-      { id: 'mock-2', suit: 'spades', rank: 'K' },
-      { id: 'mock-3', suit: 'diamonds', rank: 'Q' },
-      { id: 'mock-4', suit: 'clubs', rank: 'J' },
-      { id: 'mock-5', suit: 'hearts', rank: '10' },
-      { id: 'mock-6', suit: 'spades', rank: '7' },
-      { id: 'mock-7', suit: 'diamonds', rank: '3' },
-    ];
-  });
+  // Mock 데이터를 상수로 정의 (매 렌더마다 생성되지 않도록)
+  const MOCK_HAND: Card[] = useMemo(() => [
+    { id: 'mock-1', suit: 'hearts', rank: 'A' },
+    { id: 'mock-2', suit: 'spades', rank: 'K' },
+    { id: 'mock-3', suit: 'diamonds', rank: 'Q' },
+    { id: 'mock-4', suit: 'clubs', rank: 'J' },
+    { id: 'mock-5', suit: 'hearts', rank: '10' },
+    { id: 'mock-6', suit: 'spades', rank: '7' },
+    { id: 'mock-7', suit: 'diamonds', rank: '3' },
+  ], []);
 
-  const [topCard, setTopCard] = useState<Card>({ id: 'top', suit: 'clubs', rank: 'A' });
-  const [deckCount, setDeckCount] = useState(25);
-  const [attackStack, setAttackStack] = useState(8);
-  // Log attackStack to prevent unused variable lint error
-  console.log("Current attack stack:", attackStack);
-  const [direction, setDirection] = useState<'clockwise' | 'counter-clockwise'>('clockwise');
+  // 게임 상태 및 준비 상태 (먼저 정의)
+  const gameStatus = gameState?.status || 'LOBBY';
+  const isLobby = gameStatus === 'LOBBY';
+  const isPlaying = gameStatus === 'PLAYING';
+  
+  // 서버 상태가 있으면 사용, 없으면 Mock 데이터 (메모이제이션)
+  // 게임이 시작되면 서버에서 받은 카드만 사용
+  const myHand = useMemo(() => {
+    if (isPlaying && gameState?.myHand) {
+      return gameState.myHand;
+    }
+    // LOBBY 상태일 때는 Mock 데이터 사용
+    return gameState?.myHand || MOCK_HAND;
+  }, [isPlaying, gameState?.myHand, MOCK_HAND]);
+
+  // topCard: 게임이 시작되면 서버에서 받은 카드 사용, 아니면 Mock 데이터
+  const topCard = useMemo(() => {
+    if (isPlaying && gameState?.topCard) {
+      return gameState.topCard;
+    }
+    // LOBBY 상태일 때는 Mock 데이터 사용
+    return { id: 'top', suit: 'clubs' as const, rank: 'A' as const };
+  }, [isPlaying, gameState?.topCard]);
+  
+  const deckCount = gameState?.deckCount ?? 25;
+  const attackStack = gameState?.attackStack ?? 0;
+  const direction = gameState?.direction || 'clockwise';
+  const currentTurn = gameState?.currentTurn || null;
+  // selectedSuit는 7 카드 사용 시 필요 (향후 구현)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const selectedSuit = gameState?.selectedSuit || null;
+  const isMyTurn = currentTurn === myId && isPlaying;
+  const myReadyState = gameState?.myPlayer?.isReady || false;
+  
+  // 모든 플레이어 준비 상태 확인
+  const allPlayersReady = gameState?.players 
+    ? Array.from(gameState.players.values()).every(p => p.isReady)
+    : false;
+  const currentPlayerCount = gameState?.players?.size || 0;
+  const canStartGame = isLobby && allPlayersReady && currentPlayerCount >= 2;
+  
+  // 준비 상태 토글
+  const handleToggleReady = () => {
+    if (!isLobby) return;
+    const newReadyState = !myReadyState;
+    sendMessage('ready', { isReady: newReadyState });
+    if (DEBUG) {
+      console.log('[GameScreen] 준비 상태 변경:', newReadyState);
+    }
+  };
+
+  // 서버에서 받은 플레이어 정보를 Opponent 형식으로 변환
+  const opponents: Player[] = gameState?.players 
+    ? Array.from(gameState.players.entries())
+        .filter(([id]) => id !== myId) // 내 자신 제외
+        .map(([id, playerInfo], index) => {
+          // 플레이어 위치 결정 (서버 순서에 따라)
+          const positions: Player['position'][] = ['left-top', 'left-bottom', 'right-top', 'right-bottom'];
+          const position = positions[index % positions.length] || 'left-top';
+          
+          return {
+            id,
+            name: playerInfo.nickname || `Player ${index + 1}`,
+            character: playerInfo.characterId || '캐릭터',
+            cardCount: playerInfo.handCount || 0,
+            position,
+          };
+        })
+    : generateMockOpponents(initialPlayerCount);
 
   // Mock Skill State
   const maxSkillCooldown = 3;
   const [currentSkillCharge, setCurrentSkillCharge] = useState(1);
+
+  // 7 카드 수트 선택 상태
+  const [showSuitDialog, setShowSuitDialog] = useState(false);
+  const [pendingCard, setPendingCard] = useState<{ card: Card; index: number } | null>(null);
 
   // Sorting Logic Helpers
   const SUIT_ORDER: Record<string, number> = { 'spades': 0, 'diamonds': 1, 'hearts': 2, 'clubs': 3, 'joker': 4 };
@@ -264,8 +369,30 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
     }
   };
 
+  // 정렬된 핸드 상태 관리 (서버 상태와 분리)
+  const [sortedHand, setSortedHand] = useState<Card[]>(myHand);
+  
+  // 이전 myHand 참조를 저장하여 실제 변경 여부 확인
+  const prevHandRef = useRef<Card[]>(myHand);
+
+  // 서버 상태가 변경되면 정렬된 핸드도 업데이트
+  // 배열의 참조가 아닌 내용을 비교하여 실제 변경 시에만 업데이트
+  useEffect(() => {
+    // 배열 길이와 각 카드의 id를 비교하여 실제 변경 여부 확인
+    const hasChanged = 
+      prevHandRef.current.length !== myHand.length ||
+      prevHandRef.current.some((card, index) => 
+        card.id !== myHand[index]?.id
+      );
+
+    if (hasChanged) {
+      setSortedHand([...myHand]); // 새 배열로 복사
+      prevHandRef.current = myHand;
+    }
+  }, [myHand]);
+
   const sortHand = (mode: 'suit' | 'rank') => {
-    setMyHand(prev => [...prev].sort(getSortComparator(mode)));
+    setSortedHand(prev => [...prev].sort(getSortComparator(mode)));
   };
 
   const handleToggleSort = () => {
@@ -284,39 +411,70 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
     });
   };
 
-  // Logic placeholders
+  // 카드 내기
   const handlePlayCard = (index: number) => {
-    if (!isMyTurn) return; // Prevent playing if not my turn
+    if (!isMyTurn || !isPlaying) return; // 내 턴이 아니거나 게임 중이 아니면 무시
 
-    // In real app, emit socket event
-    const card = myHand[index];
-    setTopCard(card);
-    setMyHand(prev => prev.filter((_, i) => i !== index));
-    setDeckCount(prev => prev + 1); // Discard pile grows
+    const card = sortedHand[index];
+    if (!card) return;
 
-    // Mock: Playing 'Q' toggles direction
-    if (card.rank === 'Q') {
-      setDirection(prev => prev === 'clockwise' ? 'counter-clockwise' : 'clockwise');
+    // 7 카드인 경우 수트 선택 팝업 표시
+    if (card.rank === '7') {
+      setPendingCard({ card, index });
+      setShowSuitDialog(true);
+      return;
     }
 
-    // Mock Turn Change
-    setTurnPlayerId('op1');
-    setTimeout(() => setTurnPlayerId(myId), 2000); // Back to me after 2s
+    // 일반 카드 내기
+    playCardWithSuit(card, undefined);
+  };
+
+  // 수트 선택 후 카드 내기
+  const playCardWithSuit = (card: Card, selectedSuit?: CardSuit) => {
+    if (!card) return;
+
+    // UI 카드를 서버 카드로 변환
+    const serverCard = cardFromUI(card);
+    
+    // 서버로 card_play 메시지 전송
+    const message: CardPlayMessage = {
+      cardId: card.id,
+      suit: serverCard.suit,
+      rank: serverCard.rank,
+      selectedSuit: selectedSuit, // 7 카드 사용 시 선택한 문양
+    };
+
+    sendMessage('card_play', message);
+    
+    if (DEBUG) {
+      console.log('[GameScreen] 카드 내기:', card.id, message);
+    }
+
+    // 다이얼로그 닫기
+    setShowSuitDialog(false);
+    setPendingCard(null);
+  };
+
+  // 수트 선택 핸들러
+  const handleSuitSelect = (suit: CardSuit) => {
+    if (pendingCard) {
+      playCardWithSuit(pendingCard.card, suit);
+    }
   };
 
   const handleDrawCard = () => {
-    if (!isMyTurn) return;
+    if (!isMyTurn || !isPlaying) return; // 내 턴이 아니거나 게임 중이 아니면 무시
 
-    // TODO: 서버로 draw_card 메시지 전송
-    // 서버에서 뽑은 카드를 받아서 myHand에 추가
-    // 현재는 Mock 로직 (서버 연동 후 제거)
+    // 서버로 draw_card 메시지 전송
+    const message: DrawCardMessage = {};
+    sendMessage('draw_card', message);
     
-    // Mock: 임시로 빈 카드 추가 (서버 연동 시 제거)
-    console.warn('[Mock] handleDrawCard: 서버 연동 필요');
+    if (DEBUG) {
+      console.log('[GameScreen] 카드 뽑기 요청');
+    }
     
-    // Mock Turn Change (End turn after draw)
-    setTurnPlayerId('op1');
-    setTimeout(() => setTurnPlayerId(myId), 2000);
+    // 서버에서 카드를 뽑아서 플레이어 핸드에 추가하면
+    // 상태 동기화를 통해 자동으로 myHand가 업데이트됨
   };
 
   // Dynamic Hand Spacing Logic
@@ -324,11 +482,11 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
     const CARD_WIDTH = 80; // Correct width (w-20 = 5rem = 80px)
     const CONTAINER_MAX_WIDTH = 760; // Max width for hand area (widened from 600)
 
-    if (myHand.length <= 1) return 0;
+    if (sortedHand.length <= 1) return 0;
 
     // Default overlap: ~40px (showing 40px strip per card)
     const STANDARD_OVERLAP = 40;
-    const standardTotalWithOverlap = CARD_WIDTH + (myHand.length - 1) * (CARD_WIDTH - STANDARD_OVERLAP);
+    const standardTotalWithOverlap = CARD_WIDTH + (sortedHand.length - 1) * (CARD_WIDTH - STANDARD_OVERLAP);
 
     if (standardTotalWithOverlap <= CONTAINER_MAX_WIDTH) {
       return STANDARD_OVERLAP;
@@ -337,7 +495,7 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
     // If it exceeds, calculate needed overlap to squeeze EXACTLY into MAX_WIDTH
     // MaxWidth = CardWidth + (N-1) * (CardWidth - Overlap)
     // Overlap = CardWidth - ((MaxWidth - CardWidth) / (N-1))
-    const requiredOverlap = CARD_WIDTH - ((CONTAINER_MAX_WIDTH - CARD_WIDTH) / (myHand.length - 1));
+    const requiredOverlap = CARD_WIDTH - ((CONTAINER_MAX_WIDTH - CARD_WIDTH) / (sortedHand.length - 1));
     return Math.max(0, requiredOverlap);
   };
 
@@ -377,19 +535,50 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
         {/* Header Title replaced by Turn Indicator */}
         <TurnDirectionIndicator direction={direction} />
 
+        {/* Lobby 상태: 준비 버튼 표시 */}
+        {isLobby && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
+            <div className="bg-black/70 text-white px-6 py-3 rounded-lg shadow-xl backdrop-blur-sm">
+              <p className="text-sm mb-2">플레이어 수: {currentPlayerCount}명</p>
+              <p className="text-sm">
+                {allPlayersReady 
+                  ? `✅ 모든 플레이어 준비 완료! (최소 2명 필요)`
+                  : `⏳ 준비 중... (${Array.from(gameState?.players?.values() || []).filter(p => p.isReady).length}/${currentPlayerCount})`}
+              </p>
+            </div>
+            <button
+              onClick={handleToggleReady}
+              className={`px-8 py-3 text-lg font-bold rounded-lg transition-all shadow-lg ${
+                myReadyState
+                  ? 'bg-green-600 hover:bg-green-500 text-white border-b-4 border-green-700 active:border-b-0 active:translate-y-1'
+                  : 'bg-gray-300 hover:bg-gray-200 text-gray-900 border-b-4 border-gray-400 active:border-b-0 active:translate-y-1'
+              }`}
+            >
+              {myReadyState ? '✅ 준비 완료' : '⏳ 준비하기'}
+            </button>
+          </div>
+        )}
+
+        {/* 게임 시작 대기 메시지 */}
+        {isLobby && canStartGame && (
+          <div className="absolute top-32 left-1/2 -translate-x-1/2 z-50 bg-yellow-500/90 text-black px-6 py-2 rounded-lg shadow-xl backdrop-blur-sm animate-pulse">
+            <p className="text-sm font-bold">게임이 곧 시작됩니다...</p>
+          </div>
+        )}
+
         {/* Top Half: Opponents */}
         <div className="flex justify-between items-start w-full mt-8 sm:mt-12">
           {/* Left Column */}
           <div className="flex flex-col gap-8 sm:gap-12 pl-4 sm:pl-12">
             {opponents.filter(p => p.position.startsWith('left')).map(p => (
-              <OpponentProfile key={p.id} player={p} isTurn={turnPlayerId === p.id} />
+              <OpponentProfile key={p.id} player={p} isTurn={currentTurn === p.id} />
             ))}
           </div>
 
           {/* Right Column */}
           <div className="flex flex-col gap-8 sm:gap-12 pr-4 sm:pr-12">
             {opponents.filter(p => p.position.startsWith('right')).map(p => (
-              <OpponentProfile key={p.id} player={p} isTurn={turnPlayerId === p.id} />
+              <OpponentProfile key={p.id} player={p} isTurn={currentTurn === p.id} />
             ))}
           </div>
         </div>
@@ -447,13 +636,17 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
 
           {/* Hand Cards (Center) */}
           <div className="flex-1 flex justify-center items-end transition-all duration-300 pb-4 max-w-[760px] mx-auto min-h-[120px]">
-            {myHand.map((card, index) => {
-              // Simple playable logic: Match Suit or Rank or if card is Joker
-              // AND it must be my turn
-              const isPlayable = isMyTurn && (card.suit === topCard.suit || card.rank === topCard.rank || card.isJoker);
+            {sortedHand.map((card, index) => {
+              // 카드를 낼 수 있는지 확인: 내 턴이고, 문양/숫자가 일치하거나 조커
+              const isPlayable = isMyTurn && isPlaying && (
+                card.suit === topCard.suit || 
+                card.rank === topCard.rank || 
+                card.isJoker ||
+                topCard.suit === 'joker'
+              );
               return (
                 <div
-                  key={index}
+                  key={card.id || index}
                   className="relative transition-all duration-300 hover:-translate-y-6 hover:z-50"
                   style={{
                     marginLeft: index === 0 ? 0 : `-${overlapPx}px`,
@@ -515,6 +708,48 @@ export default function GameScreen({ playerCount = 4 }: GameScreenProps) {
             </div>
           </div>
         </div>
+
+        {/* 7 카드 수트 선택 다이얼로그 */}
+        <Dialog open={showSuitDialog} onOpenChange={setShowSuitDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>문양 선택</DialogTitle>
+              <DialogDescription>
+                7 카드를 사용했습니다. 변경할 문양을 선택하세요.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-4 py-4">
+              <button
+                onClick={() => handleSuitSelect('SPADE')}
+                className="flex flex-col items-center gap-2 p-4 border-2 border-gray-300 rounded-lg hover:border-gray-500 hover:bg-gray-100 transition-all"
+              >
+                <div className="text-4xl">♠</div>
+                <span className="text-sm font-semibold">스페이드</span>
+              </button>
+              <button
+                onClick={() => handleSuitSelect('HEART')}
+                className="flex flex-col items-center gap-2 p-4 border-2 border-gray-300 rounded-lg hover:border-gray-500 hover:bg-gray-100 transition-all"
+              >
+                <div className="text-4xl text-red-600">♥</div>
+                <span className="text-sm font-semibold">하트</span>
+              </button>
+              <button
+                onClick={() => handleSuitSelect('DIAMOND')}
+                className="flex flex-col items-center gap-2 p-4 border-2 border-gray-300 rounded-lg hover:border-gray-500 hover:bg-gray-100 transition-all"
+              >
+                <div className="text-4xl text-red-600">♦</div>
+                <span className="text-sm font-semibold">다이아몬드</span>
+              </button>
+              <button
+                onClick={() => handleSuitSelect('CLUB')}
+                className="flex flex-col items-center gap-2 p-4 border-2 border-gray-300 rounded-lg hover:border-gray-500 hover:bg-gray-100 transition-all"
+              >
+                <div className="text-4xl">♣</div>
+                <span className="text-sm font-semibold">클럽</span>
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </LandscapeLayout>
   );

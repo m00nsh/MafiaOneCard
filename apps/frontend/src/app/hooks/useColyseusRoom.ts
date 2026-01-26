@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Client, Room } from 'colyseus.js';
 import { SERVER_URL, ROOM_NAME, DEBUG } from '@/app/config/server';
-import { PlayerInfo, RoomStatus, CardSuit, CardRank, GameStateSchema, PlayerSchema, CardSchema, CharacterId } from '@mafia/shared';
+import { PlayerInfo, RoomStatus, CardSuit, CardRank, GameStateSchema, PlayerSchema, CardSchema, CharacterId, GameDirection } from '@mafia/shared';
 import { cardToUI, UICard } from '@/app/utils/cardConverter';
 
 /**
@@ -29,6 +29,13 @@ export interface UseColyseusRoomReturn {
     players: Map<string, PlayerInfo>;
     myPlayer: PlayerInfo | null;
     myHand: UICard[];
+    currentTurn: string | null;
+    direction: GameDirection;
+    attackStack: number;
+    topCard: UICard | null;
+    selectedSuit: CardSuit | null;
+    deckCount: number;
+    winnerId: string | null;
   } | null;
 
   // 메시지 전송 함수
@@ -62,6 +69,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
   const [gameState, setGameState] = useState<UseColyseusRoomReturn['gameState']>(null);
 
   const clientRef = useRef<Client | null>(null);
+  const roomRef = useRef<Room<GameStateSchema> | null>(null);
   const messageListenersRef = useRef<Map<string, Set<(message: unknown) => void>>>(new Map());
 
   // 클라이언트 초기화
@@ -75,8 +83,8 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
 
     return () => {
       // 컴포넌트 언마운트 시 연결 해제
-      if (room) {
-        room.leave();
+      if (roomRef.current) {
+        roomRef.current.leave();
       }
     };
   }, []);
@@ -101,6 +109,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
       const newRoom = await clientRef.current.joinOrCreate<GameStateSchema>(ROOM_NAME, options || {});
 
       setRoom(newRoom);
+      roomRef.current = newRoom; // ref에도 저장
       setSessionId(newRoom.sessionId);
       setStatus('connected');
 
@@ -110,12 +119,13 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
 
       // 상태 변경 리스너 등록
       newRoom.onStateChange((state) => {
-        if (DEBUG) {
-          console.log('[Colyseus] 상태 변경:', state);
-        }
+        try {
+          if (DEBUG) {
+            console.log('[Colyseus] 상태 변경:', state);
+          }
 
-        // 내 플레이어 정보 추출
-        const myPlayerData = state.players.get(newRoom.sessionId);
+          // 내 플레이어 정보 추출
+          const myPlayerData = state.players.get(newRoom.sessionId);
         let myPlayer: PlayerInfo | null = null;
         let myHand: UICard[] = [];
 
@@ -173,12 +183,52 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
           }
         });
 
-        setGameState({
+        // 추가 게임 상태 동기화
+        const currentTurn = state.currentTurn || null;
+        const direction = (state.direction === 'counter-clockwise' ? 'counter-clockwise' : 'clockwise') as GameDirection;
+        const attackStack = state.attackStack || 0;
+        // topCard가 빈 카드(id가 빈 문자열)인지 확인
+        const topCard = (state.topCard && state.topCard.id && state.topCard.id !== "") ? cardToUI({
+          id: state.topCard.id,
+          suit: state.topCard.suit as CardSuit,
+          rank: state.topCard.rank as CardRank,
+        }) : null;
+        const selectedSuit = state.selectedSuit ? (state.selectedSuit as CardSuit) : null;
+        const deckCount = state.deckCount || 0;
+        const winnerId = state.winnerId || null;
+
+        const newGameState = {
           status: state.status as RoomStatus,
           players,
           myPlayer,
           myHand,
-        });
+          currentTurn,
+          direction,
+          attackStack,
+          topCard,
+          selectedSuit,
+          deckCount,
+          winnerId,
+        };
+
+        if (DEBUG) {
+          console.log('[Colyseus] 게임 상태 업데이트:', {
+            status: newGameState.status,
+            playersCount: newGameState.players.size,
+            myHandCount: newGameState.myHand.length,
+            currentTurn: newGameState.currentTurn,
+            direction: newGameState.direction,
+            attackStack: newGameState.attackStack,
+            topCard: newGameState.topCard,
+            deckCount: newGameState.deckCount,
+          });
+        }
+
+        setGameState(newGameState);
+        } catch (err) {
+          console.error('[Colyseus] 상태 동기화 중 에러:', err);
+          // 에러가 발생해도 연결은 유지
+        }
       });
 
       // 상태 초기 동기화
@@ -203,6 +253,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
         }
         setStatus('disconnected');
         setRoom(null);
+        roomRef.current = null; // ref도 초기화
         setSessionId(null);
         setGameState(null);
       });
@@ -217,9 +268,10 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
 
   // 방 연결 해제
   const disconnect = useCallback(() => {
-    if (room) {
-      room.leave();
+    if (roomRef.current) {
+      roomRef.current.leave();
       setRoom(null);
+      roomRef.current = null;
       setSessionId(null);
       setStatus('disconnected');
       setGameState(null);
@@ -227,7 +279,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
         console.log('[Colyseus] 방 연결 해제');
       }
     }
-  }, [room]);
+  }, []);
 
   // 메시지 전송
   const sendMessage = useCallback(<T = unknown>(type: string, message?: T) => {
