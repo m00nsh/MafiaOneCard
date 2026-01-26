@@ -7,7 +7,7 @@ import LoadingScreen from '@/app/components/LoadingScreen';
 import CharacterSelectScreen from '@/app/components/CharacterSelectScreen';
 import GameScreen from '@/app/components/GameScreen';
 import CardSpriteTestScreen from '@/app/components/CardSpriteTestScreen';
-import { Toaster } from 'sonner';
+import { Toaster } from '@/app/components/ui/sonner';
 
 export type GameMode = 'custom' | 'quick';
 export type Screen = 'main' | 'gameMode' | 'playerCount' | 'room' | 'loading' | 'characterSelect' | 'game' | 'spriteTest';
@@ -139,8 +139,12 @@ export default function App() {
         <GameScreen
           playerCount={gameState.playerCount}
           selectedCharacters={gameState.selectedCharacters}
+          nickname={gameState.nickname}
         />
       )}
+
+      {/* Toast 알림 시스템 */}
+      <Toaster position="top-center" richColors closeButton />
     </div>
   );
 }

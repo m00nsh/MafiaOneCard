@@ -3,9 +3,10 @@ import PlayingCard from '@/app/components/PlayingCard';
 import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
 import { Card } from '@/app/utils/gameLogic'; // UICard 타입
 import { useColyseusRoom } from '@/app/hooks/useColyseusRoom';
+import { useToast } from '@/app/hooks/useToast';
 import { DEBUG } from '@/app/config/server';
-import { cardFromUI } from '@/app/utils/cardConverter';
-import { CardPlayMessage, DrawCardMessage, CardPlayResponseMessage, DrawCardResponseMessage, CardSuit, GameEndMessage } from '@mafia/shared';
+import { cardFromUI, suitToUI } from '@/app/utils/cardConverter';
+import { CardPlayMessage, DrawCardMessage, CardPlayResponseMessage, DrawCardResponseMessage, CardSuit, GameEndMessage, CHARACTER_SKILLS, CharacterId } from '@mafia/shared';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/app/components/ui/dialog';
 // Note: createDeck은 서버에서 처리하므로 제거됨
 
@@ -21,12 +22,14 @@ interface Player {
 interface GameScreenProps {
   playerCount: number;
   selectedCharacters: string[];
+  nickname: string;
 }
 
 // Visual component for Opponent's Hand (Stacked)
 const OpponentHandVisual = ({ count, isLeft }: { count: number; isLeft: boolean }) => {
   // Cap the visual stack to avoid rendering too many DOM elements
-  const VISUAL_CAP = 15;
+  // 10장을 초과하면 "+" 표기로 변경
+  const VISUAL_CAP = 10;
   const renderCount = Math.min(count, VISUAL_CAP);
   const OFFSET_PX = 12; // Card spacing
 
@@ -60,10 +63,10 @@ const OpponentHandVisual = ({ count, isLeft }: { count: number; isLeft: boolean 
           </div>
         );
       })}
-      {/* Show count badge if more than visual cap */}
+      {/* Show count badge if more than 10 cards */}
       {count > VISUAL_CAP && (
         <div
-          className={`absolute -bottom-2 ${isLeft ? 'right-0' : 'left-0'} bg-black/60 text-white text-xs px-2 py-0.5 rounded-full z-50`}
+          className={`absolute -bottom-2 ${isLeft ? 'right-0' : 'left-0'} bg-black/60 text-white text-xs px-2 py-0.5 rounded-full z-50 font-bold`}
         >
           +{count - VISUAL_CAP}
         </div>
@@ -197,59 +200,28 @@ const generateMockOpponents = (totalPlayers: number): Player[] => {
   return opponents;
 };
 
-export default function GameScreen({ playerCount: initialPlayerCount = 4 }: GameScreenProps) {
+export default function GameScreen({ playerCount: initialPlayerCount = 4, selectedCharacters, nickname }: GameScreenProps) {
   // Colyseus 연결
   const { status, sessionId, gameState, connect, error, sendMessage, onMessage } = useColyseusRoom();
+  
+  // 토스트 알림 (네트워크 통신 에러만 사용)
+  const { showError } = useToast();
 
-  // 컴포넌트 마운트 시 자동 연결
+  // 컴포넌트 마운트 시 자동 연결 (GameModeScreen에서 정한 닉네임 사용)
   useEffect(() => {
-    connect({ name: `Player-${Math.random().toString(36).substr(2, 9)}` });
+    connect({ name: nickname || `Player-${Math.random().toString(36).substr(2, 9)}` });
     
     // 언마운트 시 연결 해제는 useColyseusRoom 내부에서 처리됨
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nickname, connect]);
 
-  // 서버 응답 메시지 리스너 등록
+  // 연결 상태 변경 알림 (네트워크 통신 에러만 표시)
   useEffect(() => {
-    if (!onMessage) return;
-    
-    // 카드 내기 응답 처리
-    onMessage<CardPlayResponseMessage>('card_play_response', (response) => {
-      if (response.success) {
-        if (DEBUG) {
-          console.log('[GameScreen] 카드 내기 성공:', response);
-        }
-        // 상태 동기화로 자동 업데이트됨
-      } else {
-        console.error('[GameScreen] 카드 내기 실패:', response.error);
-        // TODO: 사용자에게 에러 메시지 표시 (토스트 등)
-      }
-    });
-    
-    // 카드 뽑기 응답 처리
-    onMessage<DrawCardResponseMessage>('draw_card_response', (response) => {
-      if (response.success) {
-        if (DEBUG) {
-          console.log('[GameScreen] 카드 뽑기 성공:', response);
-        }
-        // 상태 동기화로 자동 업데이트됨
-      } else {
-        console.error('[GameScreen] 카드 뽑기 실패:', response.error);
-        // TODO: 사용자에게 에러 메시지 표시 (토스트 등)
-      }
-    });
-
-    // 게임 종료 메시지 처리
-    onMessage<GameEndMessage>('game_end', (message) => {
-      console.log('[GameScreen] 게임 종료:', message);
-      // TODO: 게임 종료 화면 표시
-      const currentMyId = sessionId || 'me';
-      if (message.winnerId === currentMyId) {
-        alert('🎉 승리했습니다!');
-      } else {
-        alert(`게임 종료! 승자: ${message.winnerId}`);
-      }
-    });
-  }, [onMessage, sessionId]);
+    if (status === 'error') {
+      showError('서버 연결에 실패했습니다', {
+        description: error?.message || '서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.',
+      });
+    }
+  }, [status, error, showError]);
 
   // 서버 상태에서 데이터 가져오기 (없으면 Mock 데이터 사용)
   const myId = sessionId || 'me';
@@ -306,6 +278,44 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4 }: Game
     : false;
   const currentPlayerCount = gameState?.players?.size || 0;
   const canStartGame = isLobby && allPlayersReady && currentPlayerCount >= 2;
+
+
+  // 서버 응답 메시지 리스너 등록
+  useEffect(() => {
+    if (!onMessage) return;
+    
+    // 카드 내기 응답 처리
+    onMessage<CardPlayResponseMessage>('card_play_response', (response) => {
+      if (response.success) {
+        if (DEBUG) {
+          console.log('[GameScreen] 카드 내기 성공:', response);
+        }
+        // 상태 동기화로 자동 업데이트됨
+      } else {
+        console.error('[GameScreen] 카드 내기 실패:', response.error);
+        // 에러는 콘솔에만 기록 (네트워크 통신 에러가 아니므로 토스트 표시 안 함)
+      }
+    });
+    
+    // 카드 뽑기 응답 처리
+    onMessage<DrawCardResponseMessage>('draw_card_response', (response) => {
+      if (response.success) {
+        if (DEBUG) {
+          console.log('[GameScreen] 카드 뽑기 성공:', response);
+        }
+        // 상태 동기화로 자동 업데이트됨
+      } else {
+        console.error('[GameScreen] 카드 뽑기 실패:', response.error);
+        // 에러는 콘솔에만 기록 (네트워크 통신 에러가 아니므로 토스트 표시 안 함)
+      }
+    });
+
+    // 게임 종료 메시지 처리
+    onMessage<GameEndMessage>('game_end', (message) => {
+      console.log('[GameScreen] 게임 종료:', message);
+      // 게임 종료는 UI에서 처리 (토스트 알림 제거)
+    });
+  }, [onMessage, sessionId]);
   
   // 준비 상태 토글
   const handleToggleReady = () => {
@@ -317,24 +327,70 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4 }: Game
     }
   };
 
+  // 내 캐릭터 이름 가져오기
+  const myCharacterName = useMemo(() => {
+    if (selectedCharacters.length > 0) {
+      const characterId = selectedCharacters[0] as CharacterId;
+      return CHARACTER_SKILLS[characterId]?.name || '캐릭터';
+    }
+    return '캐릭터';
+  }, [selectedCharacters]);
+
   // 서버에서 받은 플레이어 정보를 Opponent 형식으로 변환
-  const opponents: Player[] = gameState?.players 
-    ? Array.from(gameState.players.entries())
-        .filter(([id]) => id !== myId) // 내 자신 제외
-        .map(([id, playerInfo], index) => {
-          // 플레이어 위치 결정 (서버 순서에 따라)
-          const positions: Player['position'][] = ['left-top', 'left-bottom', 'right-top', 'right-bottom'];
-          const position = positions[index % positions.length] || 'left-top';
-          
-          return {
-            id,
-            name: playerInfo.nickname || `Player ${index + 1}`,
-            character: playerInfo.characterId || '캐릭터',
-            cardCount: playerInfo.handCount || 0,
-            position,
-          };
-        })
-    : generateMockOpponents(initialPlayerCount);
+  // 시계 방향으로 턴 순서대로 배치: 플레이어 수에 따라 위치 결정
+  const opponents: Player[] = useMemo(() => {
+    if (!gameState?.players) {
+      return generateMockOpponents(initialPlayerCount);
+    }
+
+    const allPlayerIds = Array.from(gameState.players.keys());
+    const myIndex = allPlayerIds.indexOf(myId);
+    const opponentCount = allPlayerIds.length - 1; // 내 자신 제외
+    
+    // 내 자신을 기준으로 시계 방향 순서 생성
+    // 예: 내가 0번이면 [1, 2, 3], 내가 1번이면 [2, 3, 0]
+    const orderedOpponentIds: string[] = [];
+    for (let i = 1; i < allPlayerIds.length; i++) {
+      const nextIndex = (myIndex + i) % allPlayerIds.length;
+      orderedOpponentIds.push(allPlayerIds[nextIndex]);
+    }
+
+    // 플레이어 수에 따른 위치 배치
+    // 2명 (opponents 1명): 좌 1 (left-top)
+    // 3명 (opponents 2명): 좌 1, 우 1 (left-top, right-top)
+    // 4명 (opponents 3명): 좌 2, 우 1 (left-top, left-bottom, right-top)
+    // 5명 (opponents 4명): 좌 2, 우 2 (left-top, left-bottom, right-top, right-bottom)
+    const positions: Player['position'][] = [];
+    if (opponentCount === 1) {
+      positions.push('left-top');
+    } else if (opponentCount === 2) {
+      positions.push('left-top', 'right-top');
+    } else if (opponentCount === 3) {
+      positions.push('left-top', 'left-bottom', 'right-top');
+    } else {
+      // 4명 이상
+      positions.push('left-top', 'left-bottom', 'right-top', 'right-bottom');
+    }
+
+    return orderedOpponentIds.map((id, index) => {
+      const playerInfo = gameState.players.get(id);
+      if (!playerInfo) return null;
+      
+      // 캐릭터 이름 가져오기
+      const characterId = playerInfo.characterId as CharacterId | undefined;
+      const characterName = characterId && CHARACTER_SKILLS[characterId] 
+        ? CHARACTER_SKILLS[characterId].name 
+        : '캐릭터';
+      
+      return {
+        id,
+        name: playerInfo.nickname || `Player ${index + 1}`,
+        character: characterName,
+        cardCount: playerInfo.handCount || 0,
+        position: positions[index] || 'left-top',
+      };
+    }).filter((p): p is Player => p !== null);
+  }, [gameState?.players, myId, initialPlayerCount]);
 
   // Mock Skill State
   const maxSkillCooldown = 3;
@@ -479,13 +535,13 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4 }: Game
 
   // Dynamic Hand Spacing Logic
   const calculateOverlap = () => {
-    const CARD_WIDTH = 80; // Correct width (w-20 = 5rem = 80px)
+    const CARD_WIDTH = 112; // Updated width (7rem = 112px) - 본인 손패 카드 크기
     const CONTAINER_MAX_WIDTH = 760; // Max width for hand area (widened from 600)
 
     if (sortedHand.length <= 1) return 0;
 
-    // Default overlap: ~40px (showing 40px strip per card)
-    const STANDARD_OVERLAP = 40;
+    // Default overlap: ~56px (showing 56px strip per card) - 카드 크기에 비례하여 조정
+    const STANDARD_OVERLAP = 56;
     const standardTotalWithOverlap = CARD_WIDTH + (sortedHand.length - 1) * (CARD_WIDTH - STANDARD_OVERLAP);
 
     if (standardTotalWithOverlap <= CONTAINER_MAX_WIDTH) {
@@ -570,14 +626,22 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4 }: Game
         <div className="flex justify-between items-start w-full mt-8 sm:mt-12">
           {/* Left Column */}
           <div className="flex flex-col gap-8 sm:gap-12 pl-4 sm:pl-12">
-            {opponents.filter(p => p.position.startsWith('left')).map(p => (
+            {/* 좌 상단, 좌 하단 순서로 표시 */}
+            {opponents.filter(p => p.position === 'left-top').map(p => (
+              <OpponentProfile key={p.id} player={p} isTurn={currentTurn === p.id} />
+            ))}
+            {opponents.filter(p => p.position === 'left-bottom').map(p => (
               <OpponentProfile key={p.id} player={p} isTurn={currentTurn === p.id} />
             ))}
           </div>
 
           {/* Right Column */}
           <div className="flex flex-col gap-8 sm:gap-12 pr-4 sm:pr-12">
-            {opponents.filter(p => p.position.startsWith('right')).map(p => (
+            {/* 우 상단, 우 하단 순서로 표시 */}
+            {opponents.filter(p => p.position === 'right-top').map(p => (
+              <OpponentProfile key={p.id} player={p} isTurn={currentTurn === p.id} />
+            ))}
+            {opponents.filter(p => p.position === 'right-bottom').map(p => (
               <OpponentProfile key={p.id} player={p} isTurn={currentTurn === p.id} />
             ))}
           </div>
@@ -600,6 +664,7 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4 }: Game
               card={{ id: 'deck-top', suit: 'joker', rank: 'JOKER_BW' }}
               faceDown={true}
               className="hover:scale-105 transition-transform"
+              style={{ width: '7rem' }} // 본인 손패와 동일한 크기
             />
             <div className="text-center text-white font-bold bg-black/50 rounded-full px-3 py-1">
               남은 카드: {deckCount}
@@ -608,7 +673,10 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4 }: Game
 
           {/* Top Card (Discard) */}
           <div className="relative flex flex-col items-center gap-2">
-            <PlayingCard card={topCard} />
+            <PlayingCard 
+              card={topCard} 
+              style={{ width: '7rem' }} // 본인 손패와 동일한 크기
+            />
             {attackStack > 0 ? (
               <div className="text-center text-white font-bold bg-red-600 rounded-full px-3 py-1 shadow-lg">
                 누적 공격: {attackStack}
@@ -622,8 +690,13 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4 }: Game
 
         {/* Bottom Area: Controls & Hand */}
         <div className="w-full flex items-end justify-between gap-4 mt-auto mb-2 relative">
-          {/* Sort Button (Left) */}
-          <div className="flex flex-col justify-end w-[160px] shrink-0">
+          {/* 내 정보 표시 (Left) */}
+          <div className="flex flex-col justify-end w-[160px] shrink-0 gap-2">
+            <div className="bg-gray-300 rounded-lg p-4 min-w-[140px] sm:min-w-[160px] shadow-lg">
+              <p className="text-gray-900 font-bold text-lg sm:text-xl truncate">{nickname || 'Player'}</p>
+              <p className="text-gray-600 text-sm sm:text-base">{`{${myCharacterName}}`}</p>
+              <p className="text-blue-600 font-bold mt-1">카드: {myHand.length}장</p>
+            </div>
             <button
               onClick={handleToggleSort}
               className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-4 rounded-xl text-xl font-bold shadow-lg transition-transform hover:scale-105 w-full whitespace-nowrap"
@@ -637,13 +710,59 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4 }: Game
           {/* Hand Cards (Center) */}
           <div className="flex-1 flex justify-center items-end transition-all duration-300 pb-4 max-w-[760px] mx-auto min-h-[120px]">
             {sortedHand.map((card, index) => {
-              // 카드를 낼 수 있는지 확인: 내 턴이고, 문양/숫자가 일치하거나 조커
-              const isPlayable = isMyTurn && isPlaying && (
-                card.suit === topCard.suit || 
-                card.rank === topCard.rank || 
-                card.isJoker ||
-                topCard.suit === 'joker'
-              );
+              // 공격 스택이 있을 때 낼 수 있는 카드만 표시
+              let isPlayable = false;
+              
+              if (isMyTurn && isPlaying) {
+                if (attackStack > 0) {
+                  // 공격 스택이 있을 때: 공격 카드만 낼 수 있음
+                  const topCardRank = topCard.rank;
+                  const topCardSuit = topCard.suit;
+                  
+                  // 컬러 조커는 막을 수 없음
+                  if (topCardRank === 'JOKER_COLOR') {
+                    isPlayable = false;
+                  }
+                  // 흑백 조커는 컬러 조커로만 막을 수 있음
+                  else if (topCardRank === 'JOKER_BW') {
+                    isPlayable = card.rank === 'JOKER_COLOR';
+                  }
+                  // 2 카드: 같은 무늬 A, 다른 무늬 2, 조커
+                  else if (topCardRank === '2') {
+                    isPlayable = Boolean(
+                      (card.rank === 'A' && card.suit === topCardSuit) ||
+                      (card.rank === '2' && card.suit !== topCardSuit) ||
+                      card.isJoker
+                    );
+                  }
+                  // A 카드: 다른 무늬 A, 조커
+                  else if (topCardRank === 'A') {
+                    isPlayable = Boolean(
+                      (card.rank === 'A' && card.suit !== topCardSuit) ||
+                      card.isJoker
+                    );
+                  }
+                  // 기타 공격 카드는 일반 규칙 적용 (같은 무늬/숫자 또는 조커)
+                  else {
+                    isPlayable = Boolean(
+                      card.suit === topCardSuit || 
+                      card.rank === topCardRank || 
+                      card.isJoker
+                    );
+                  }
+                } else {
+                  // 공격 스택이 없을 때: 일반 규칙
+                  const selectedSuitUI = selectedSuit ? suitToUI(selectedSuit) : null;
+                  isPlayable = Boolean(
+                    card.suit === topCard.suit || 
+                    card.rank === topCard.rank || 
+                    card.isJoker ||
+                    (selectedSuitUI && card.suit === selectedSuitUI) ||
+                    topCard.suit === 'joker'
+                  );
+                }
+              }
+              
               return (
                 <div
                   key={card.id || index}
@@ -658,6 +777,7 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4 }: Game
                     isPlayable={isPlayable}
                     onClick={() => isPlayable && handlePlayCard(index)}
                     className="shadow-2xl"
+                    style={{ width: '7rem' }} // 더 큰 크기로 조정
                   />
                 </div>
               );
