@@ -20,19 +20,19 @@ importers:
         specifier: ~0.16.7
         version: 0.16.7
       '@colyseus/schema':
-        specifier: ^1.0.46
+        specifier: 1.0.46
         version: 1.0.46
       '@colyseus/ws-transport':
-        specifier: ~0.16.0
+        specifier: 0.16.0
         version: 0.16.0
       '@mafia/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       colyseus:
-        specifier: ~0.16.0
+        specifier: 0.16.0
         version: 0.16.0(@colyseus/schema@1.0.46)(@pm2/io@6.1.0)(express@5.2.1)
       colyseus.js:
-        specifier: ~0.16.0
+        specifier: 0.16.0
         version: 0.16.0
       express:
         specifier: ^5.2.1
@@ -1760,10 +1760,6 @@ packages:
     engines: {node: ^14.18.0 || >=16.0.0}
     peerDependencies:
       vite: 6.3.5
-
-  accepts@1.3.8:
-    resolution: {integrity: sha512-PYAthTa2m2VKxuvSD3DPC/Gy+U+sOA1LAuT8mkmRuvw+NACSaeXEQ+NHcVF7rONl6qcaxV3Uuemwawk+7+SJLw==}
-    engines: {node: '>= 0.6'}
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -5774,7 +5770,7 @@ snapshots:
 
   require-in-the-middle@5.2.0:
     dependencies:
-      debug: 4.3.7
+      debug: 4.4.3(supports-color@5.5.0)
       module-details-from-path: 1.0.4
       resolve: 1.22.11
     transitivePeerDependencies:
