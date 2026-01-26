@@ -103,6 +103,16 @@ export class MafiaRoom extends Room<GameStateSchema> {
             // 모든 검증 통과 후 카드를 핸드에서 제거
             player.hand.splice(cardIndex, 1);
 
+            // 기존 topCard를 discardPile에 보관 (데이터 손실 방지)
+            const oldTopCard = this.state.topCard;
+            if (oldTopCard && oldTopCard.id !== "") {
+                this.discardPile.push({
+                    id: oldTopCard.id,
+                    suit: oldTopCard.suit,
+                    rank: oldTopCard.rank
+                });
+            }
+
             // topCard 업데이트
             const newTopCard = new CardSchema(card.id, card.suit, card.rank);
             this.state.topCard = newTopCard;
@@ -248,20 +258,24 @@ export class MafiaRoom extends Room<GameStateSchema> {
             const cardsToDraw = this.state.attackStack > 0 ? this.state.attackStack : 1;
             const drawnCards: Card[] = [];
 
-            for (let i = 0; i < cardsToDraw; i++) {
+            // 1. 현재 덱에서 최대한 뽑기
+            while (drawnCards.length < cardsToDraw) {
                 if (this.deck.length === 0) {
-                    console.warn(`${client.sessionId}: 덱에 카드가 없습니다.`);
-                    break;
+                    // 덱이 비었으면 보충 시도
+                    this.replenishDeck();
+
+                    // 보충 후에도 비었으면 더 이상 뽑을 수 없음 (게임 내 카드 부족)
+                    if (this.deck.length === 0) break;
                 }
 
                 const drawnCard = this.deck.pop();
                 if (drawnCard) {
                     drawnCards.push(drawnCard);
-                    // 플레이어 핸드에 추가
                     player.hand.push(new CardSchema(drawnCard.id, drawnCard.suit, drawnCard.rank));
                 }
             }
 
+            // 2. 뽑은 카드가 있으면 처리
             if (drawnCards.length > 0) {
                 // 공격 스택 초기화 (카드를 뽑았으므로)
                 if (this.state.attackStack > 0) {
@@ -286,13 +300,13 @@ export class MafiaRoom extends Room<GameStateSchema> {
                     this.handlePlayerElimination(client, 'burst');
                 }
             } else {
-                // 덱이 비어있을 때 실패 응답
+                // 덱도 비고 버린 카드도 없어서 하나도 못 뽑은 경우
                 client.send("draw_card_response", {
                     success: false,
                     error: {
-                        code: ErrorCode.INTERNAL_SERVER_ERROR, // 덱 부족은 서버 로직상 처리되어야 하므로 내부 에러로 간주하거나 별도 코드 정의 필요
+                        code: ErrorCode.INTERNAL_SERVER_ERROR,
                         type: "INTERNAL_SERVER_ERROR",
-                        message: "덱에 카드가 없습니다.",
+                        message: "더 이상 뽑을 카드가 없습니다.",
                     },
                 });
             }
@@ -309,6 +323,27 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 this.checkStartGame();
             }
         });
+    }
+
+    // 덱 보충 (DiscardPile -> Deck)
+    replenishDeck() {
+        if (this.discardPile.length === 0) return;
+
+        console.log(`덱 보충 시작: 버린 카드 ${this.discardPile.length}장을 덱으로 이동합니다.`);
+
+        // discardPile의 카드를 deck으로 이동
+        // 주의: topCard는 discardPile에 없으므로 안전함
+        this.discardPile.forEach(card => {
+            this.deck.push(card);
+        });
+
+        // discardPile 초기화
+        this.discardPile = [];
+
+        // 덱 셔플
+        this.shuffleDeck();
+        this.state.deckCount = this.deck.length;
+        console.log(`덱 보충 완료: 현재 덱 ${this.deck.length}장`);
     }
 
     checkStartGame() {
