@@ -280,7 +280,7 @@ room.onMessage("announcement", (message) => {
      ├─────────────────────────────>│
      │                              │ onJoin()
      │                              │ GameState 업데이트
-     │  State Sync (초기 상태)      │
+     │  State Sync (초기 상태)       │
      │<─────────────────────────────┤
      │                              │
      │  send("ready")               │
@@ -289,14 +289,14 @@ room.onMessage("announcement", (message) => {
      │                              │ isReady = true
      │                              │ checkStartGame()
      │                              │
-     │  State Sync (isReady 변경)   │
+     │  State Sync (isReady 변경)    │
      │<─────────────────────────────┤
      │                              │
      │  send("card_play", {...})    │
      │─────────────────────────────>│
      │                              │ onMessage("card_play")
      │                              │ broadcast("announcement")
-     │  Message: "announcement"      │
+     │  Message: "announcement"     │
      │<─────────────────────────────┤
 ```
 
