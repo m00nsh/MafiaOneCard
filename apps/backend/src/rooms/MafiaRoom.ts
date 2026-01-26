@@ -53,47 +53,57 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 return;
             }
 
-            // 공격 스택이 있을 때는 공격 카드만 낼 수 있음 (카드 제거 전에 검증)
+            // 공격 스택이 있을 때는 공격 카드만 낼 수 있음
             if (this.state.attackStack > 0) {
-                const isAttackCard =
-                    card.rank === 'A' ||
-                    card.rank === '2' ||
-                    (card.suit === 'JOKER' && card.rank === 'BLACK') ||
-                    (card.suit === 'JOKER' && card.rank === 'COLOR');
+                const attackValue = this.getAttackValue(card);
+                const currentAttackValue = this.state.topCard ? this.getAttackValue(this.state.topCard) : 0;
 
-                if (!isAttackCard) {
-                    console.warn(`${client.sessionId}: 공격 스택이 있을 때는 공격 카드만 낼 수 있습니다.`);
+                // 방어 실패 조건:
+                // 1. 공격 카드가 아님 (attackValue === 0)
+                // 2. 공격 카드를 냈지만, 현재 공격보다 약함 (attackValue < currentAttackValue)
+                if (attackValue === 0 || attackValue < currentAttackValue) {
+                    console.warn(`${client.sessionId}: 방어 실패 - 공격 스택: ${this.state.attackStack}, 제출: ${attackValue}, 필요: ${currentAttackValue}`);
                     client.send("card_play_response", {
                         success: false,
                         error: {
                             code: ErrorCode.MUST_RESPOND_TO_ATTACK,
                             type: "MUST_RESPOND_TO_ATTACK",
-                            message: `방어 실패! 현재 ${this.state.attackStack}장의 공격이 들어왔습니다. 공격 카드(A, 2, 조커)를 내야 합니다.`,
+                            message: `방어 실패! 더 강력한 공격 카드로 받아쳐야 합니다. (현재 공격 등급: ${currentAttackValue}, 제출: ${attackValue})`,
                         },
                     });
                     return;
                 }
             }
 
-            // 카드 유효성 검사 (간단한 버전 - 향후 개선 필요)
+            // 카드 유효성 검사
             const topCard = this.state.topCard;
             if (topCard && topCard.id !== "") {
-                const canPlay =
-                    card.suit === topCard.suit ||
-                    card.rank === topCard.rank ||
-                    card.suit === 'JOKER' ||
-                    topCard.suit === 'JOKER' ||
-                    (this.state.selectedSuit && card.suit === this.state.selectedSuit); // 7카드 문양 변경 반영
+                // 1. 7 카드로 문양이 변경된 상태인지 확인
+                let targetSuit = topCard.suit;
+                if (this.state.selectedSuit && this.state.selectedSuit !== "") {
+                    targetSuit = this.state.selectedSuit as CardSuit;
+                    console.log(`현재 변경된 문양 적용 중: ${targetSuit}`);
+                }
+
+                // 2. 낼 수 있는 조건 검사
+                const matchesSuit = card.suit === targetSuit;
+                const matchesRank = card.rank === topCard.rank;
+                const isJoker = card.suit === 'JOKER';
+                const isTopJoker = topCard.suit === 'JOKER';
+
+                // 주의: 문양이 변경된 상태라면, 문양이 일치하거나 조커여야 함 (랭크 일치는 허용하되, topCard가 변경된 문양을 반영하지 않으므로 주의)
+                // 하지만 일반적인 원카드 룰에서는 '숫자가 같으면 낼 수 있다'가 우선시되기도 함.
+                // 여기서는 안전하게 '변경된 문양과 같거나', '숫자가 같거나', '조커이거나' 로 허용
+                const canPlay = matchesSuit || matchesRank || isJoker || isTopJoker;
 
                 if (!canPlay) {
-                    console.warn(`${client.sessionId}: 카드를 낼 수 없습니다.`);
-                    // 실패 응답 전송
+                    console.warn(`${client.sessionId}: 카드를 낼 수 없습니다. targetSuit=${targetSuit}, card=${card.suit}`);
                     client.send("card_play_response", {
                         success: false,
                         error: {
-                            code: ErrorCode.INVALID_CARD_SUIT, // 편의상 Suit 불일치로 통일 (또는 로직에 따라 구분 가능)
+                            code: ErrorCode.INVALID_CARD_SUIT,
                             type: "INVALID_CARD_SUIT",
-                            message: `낼 수 없는 카드입니다. (현재 바닥: ${topCard.suit} ${topCard.rank})`,
+                            message: `낼 수 없는 카드입니다. (필요 문양: ${targetSuit}, 랭크: ${topCard.rank})`,
                         },
                     });
                     return;
@@ -117,9 +127,16 @@ export class MafiaRoom extends Room<GameStateSchema> {
             const newTopCard = new CardSchema(card.id, card.suit, card.rank);
             this.state.topCard = newTopCard;
 
-            // 7 카드 사용 시 문양 변경
-            if (message.selectedSuit && card.rank === '7') {
+            // 7 카드 사용 시 문양 변경 처리
+            if (card.rank === '7' && message.selectedSuit) {
                 this.state.selectedSuit = message.selectedSuit;
+                console.log(`문양이 ${message.selectedSuit}로 변경되었습니다.`);
+            } else {
+                // 7 카드가 아니면 문양 변경 상태 해제 (중요!)
+                // 단, 조커는 문양 속성이 없으므로 selectedSuit를 유지할 수도 있으나, 보통 조커 후에는 원하는 거 낼 수 있음.
+                // 여기서는 7이 아니면 무조건 초기화하여 '다음 턴 1회 한정' 처럼 동작하게 하거나,
+                // 플레이어가 카드를 냈으니 그 카드의 문양으로 흐름이 이어지므로 초기화하는 것이 맞음.
+                this.state.selectedSuit = "";
             }
 
             // 카드 효과 처리
@@ -142,11 +159,12 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 shouldReverse = true;
             } else if (card.rank === 'K') {
                 shouldKeepTurn = true; // K 카드: 턴 유지 (한 장 더 내기)
-                // K 카드는 공격 스택을 초기화하지 않음 (공격 스택이 있으면 유지)
+                // K 카드는 공격 스택을 초기화하지 않음 (공격 스택이 있으면 유지) -> 사실 K로 공격 방어는 불가능하므로 공격 스택이 0일 때만 의미 있음
             } else {
                 // 일반 카드: 공격 스택이 없을 때만 초기화
                 // 공격 스택이 있으면 이미 위에서 공격 카드만 낼 수 있도록 검증했으므로
-                // 여기 도달했다는 것은 공격 스택이 0이라는 의미
+                // 여기 도달했다는 것은 공격 스택이 0이거나(일반 상황), 공격 카드를 내서 스택이 증가한 경우(위의 if문)
+                // 따라서 '일반 카드'인 경우에만 스택을 0으로 확정하면 됨.
                 this.state.attackStack = 0;
             }
 
@@ -428,20 +446,7 @@ export class MafiaRoom extends Room<GameStateSchema> {
         console.log(`턴 전환: ${this.state.currentTurn} (방향: ${this.state.direction})`);
     }
 
-    // 현재 턴(기준)으로부터 target 플레이어까지의 거리 계산
-    getTurnDistance(allPlayers: string[], currentIndex: number, targetId: string): number {
-        const targetIndex = allPlayers.indexOf(targetId);
-        if (targetIndex === -1) return 999;
 
-        const total = allPlayers.length;
-        if (this.state.direction === 'clockwise') {
-            // 시계 방향 거리: (Target - Current + Total) % Total
-            return (targetIndex - currentIndex + total) % total;
-        } else {
-            // 반시계 방향 거리: (Current - Target + Total) % Total
-            return (currentIndex - targetIndex + total) % total;
-        }
-    }
 
     // 1. 54장의 카드 생성 (A~K x 4무늬 + 조커 2장)
     createDeck() {
@@ -580,6 +585,30 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 reason: 'hand_empty', // 생존 승리도 일반 승리와 동일하게 처리하거나 별도 코드로 구분 가능
                 stats: winnerStats
             });
+        }
+    }
+
+    // 공격 카드의 방어력/공격력 값을 반환 (2 < A < Black < Color)
+    getAttackValue(card: Card): number {
+        if (card.suit === 'JOKER') {
+            if (card.rank === 'COLOR') return 8; // 컬러 조커 (최강)
+            if (card.rank === 'BLACK') return 5; // 흑백 조커
+        }
+        if (card.rank === 'A') return 3;
+        if (card.rank === '2') return 2;
+        return 0; // 공격 카드가 아님
+    }
+
+    // 턴 거리 계산 (currentTurnIndex에서 targetId까지의 거리)
+    getTurnDistance(playerIds: string[], currentIndex: number, targetId: string): number {
+        const targetIndex = playerIds.indexOf(targetId);
+        if (targetIndex === -1) return 999;
+
+        const size = playerIds.length;
+        if (this.state.direction === 'clockwise') {
+            return (targetIndex - currentIndex + size) % size;
+        } else {
+            return (currentIndex - targetIndex + size) % size;
         }
     }
 }
