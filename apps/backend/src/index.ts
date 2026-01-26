@@ -2,9 +2,11 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'colyseus';
 import { monitor } from "@colyseus/monitor";
+import cors from 'cors';
 import { MafiaRoom } from './rooms/MafiaRoom';
 
 const app = express();
+app.use(cors());
 
 // /colyseus 주소로 접속하면 모니터 화면이 뜨게 합니다.
 app.use("/colyseus", monitor() as any);
