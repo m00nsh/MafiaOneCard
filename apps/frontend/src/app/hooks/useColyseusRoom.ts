@@ -1,28 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Client, Room } from 'colyseus.js';
 import { SERVER_URL, ROOM_NAME, DEBUG } from '@/app/config/server';
-import { PlayerInfo, RoomStatus, CardSuit, CardRank } from '@mafia/shared';
+import { PlayerInfo, RoomStatus, CardSuit, CardRank, GameStateSchema, PlayerSchema, CardSchema, CharacterId } from '@mafia/shared';
 import { cardToUI, UICard } from '@/app/utils/cardConverter';
-
-/**
- * Colyseus Room State 타입 (백엔드 Schema와 매핑)
- * Note: Colyseus가 자동으로 동기화하는 Schema 구조
- */
-interface ColyseusGameState {
-  status: string;
-  players: Map<string, ColyseusPlayer>;
-}
-
-interface ColyseusPlayer {
-  hand: Array<ColyseusCard>;
-  isReady: boolean;
-}
-
-interface ColyseusCard {
-  id: string;
-  suit: string;
-  rank: string;
-}
 
 /**
  * Colyseus 방 연결 상태
@@ -35,7 +15,7 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'er
 export interface UseColyseusRoomReturn {
   // 연결 상태
   status: ConnectionStatus;
-  room: Room<ColyseusGameState> | null;
+  room: Room<GameStateSchema> | null;
   sessionId: string | null;
   error: Error | null;
 
@@ -52,10 +32,10 @@ export interface UseColyseusRoomReturn {
   } | null;
 
   // 메시지 전송 함수
-  sendMessage: <T = any>(type: string, message?: T) => void;
+  sendMessage: <T = unknown>(type: string, message?: T) => void;
 
   // 메시지 리스너 등록 함수
-  onMessage: <T = any>(type: string, callback: (message: T) => void) => void;
+  onMessage: <T = unknown>(type: string, callback: (message: T) => void) => void;
 }
 
 /**
@@ -76,13 +56,13 @@ export interface UseColyseusRoomReturn {
  */
 export function useColyseusRoom(): UseColyseusRoomReturn {
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
-  const [room, setRoom] = useState<Room<ColyseusGameState> | null>(null);
+  const [room, setRoom] = useState<Room<GameStateSchema> | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [gameState, setGameState] = useState<UseColyseusRoomReturn['gameState']>(null);
 
   const clientRef = useRef<Client | null>(null);
-  const messageListenersRef = useRef<Map<string, Set<(message: any) => void>>>(new Map());
+  const messageListenersRef = useRef<Map<string, Set<(message: unknown) => void>>>(new Map());
 
   // 클라이언트 초기화
   useEffect(() => {
@@ -118,7 +98,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
         console.log('[Colyseus] 방 연결 시도:', ROOM_NAME, options);
       }
 
-      const newRoom = await clientRef.current.joinOrCreate<ColyseusGameState>(ROOM_NAME, options || {});
+      const newRoom = await clientRef.current.joinOrCreate<GameStateSchema>(ROOM_NAME, options || {});
 
       setRoom(newRoom);
       setSessionId(newRoom.sessionId);
@@ -140,38 +120,55 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
         let myHand: UICard[] = [];
 
         if (myPlayerData) {
-          // CardSchema 배열을 UICard 배열로 변환
-          myHand = Array.from(myPlayerData.hand).map(card => cardToUI({
+          // PlayerSchema의 hand (ArraySchema<CardSchema>)를 UICard 배열로 변환
+          // Colyseus는 ArraySchema를 배열처럼 사용할 수 있도록 제공
+          const handArray = Array.from(myPlayerData.hand);
+          myHand = handArray.map((card: CardSchema) => cardToUI({
             id: card.id,
             suit: card.suit as CardSuit,
             rank: card.rank as CardRank,
           }));
 
+          // PlayerSchema에서 모든 정보 가져오기
+          const characterId: CharacterId | null = myPlayerData.characterId 
+            ? (myPlayerData.characterId as CharacterId)
+            : null;
+
           myPlayer = {
             id: newRoom.sessionId,
-            nickname: '', // TODO: 서버에서 받아오기
-            characterId: null, // TODO: 서버에서 받아오기
+            nickname: myPlayerData.nickname || '',
+            characterId,
             isReady: myPlayerData.isReady,
-            isHost: false, // TODO: 서버에서 받아오기
+            isHost: myPlayerData.isHost,
             handCount: myHand.length,
+            skillCooldown: myPlayerData.skillCooldown,
+            skillUsesLeft: myPlayerData.skillUsesLeft,
           };
         }
 
         // 모든 플레이어 정보 변환
         const players = new Map<string, PlayerInfo>();
-        state.players.forEach((playerData, id) => {
+        state.players.forEach((playerData: PlayerSchema, id: string) => {
           if (id === newRoom.sessionId) {
             if (myPlayer) {
               players.set(id, myPlayer);
             }
           } else {
+            // 다른 플레이어는 핸드 개수만 알 수 있음 (보안)
+            const handCount = Array.from(playerData.hand).length;
+            const characterId: CharacterId | null = playerData.characterId 
+              ? (playerData.characterId as CharacterId)
+              : null;
+            
             players.set(id, {
               id,
-              nickname: '', // TODO: 서버에서 받아오기
-              characterId: null,
+              nickname: playerData.nickname || '',
+              characterId,
               isReady: playerData.isReady,
-              isHost: false,
-              handCount: playerData.hand.length,
+              isHost: playerData.isHost,
+              handCount,
+              skillCooldown: playerData.skillCooldown,
+              skillUsesLeft: playerData.skillUsesLeft,
             });
           }
         });
@@ -233,7 +230,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
   }, [room]);
 
   // 메시지 전송
-  const sendMessage = useCallback(<T = any>(type: string, message?: T) => {
+  const sendMessage = useCallback(<T = unknown>(type: string, message?: T) => {
     if (!room) {
       console.warn('[Colyseus] 메시지 전송 실패: 방에 연결되지 않음');
       return;
@@ -250,7 +247,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
   }, [room]);
 
   // 메시지 리스너 등록
-  const onMessage = useCallback(<T = any>(type: string, callback: (message: T) => void) => {
+  const onMessage = useCallback(<T = unknown>(type: string, callback: (message: T) => void) => {
     if (!room) {
       console.warn('[Colyseus] 리스너 등록 실패: 방에 연결되지 않음');
       return;
@@ -260,7 +257,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
     if (!messageListenersRef.current.has(type)) {
       messageListenersRef.current.set(type, new Set());
     }
-    messageListenersRef.current.get(type)!.add(callback);
+    messageListenersRef.current.get(type)!.add(callback as (message: unknown) => void);
 
     // Colyseus 리스너 등록
     room.onMessage(type, (message: T) => {

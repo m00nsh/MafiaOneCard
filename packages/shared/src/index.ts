@@ -1,4 +1,10 @@
 // ============================================================================
+// Colyseus Schema v3 Imports
+// ============================================================================
+
+import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema";
+
+// ============================================================================
 // 공유 상수
 // ============================================================================
 
@@ -11,10 +17,25 @@ export const SHARED_CONSTANT = "Hello from shared";
 export type CardSuit = 'SPADE' | 'HEART' | 'DIAMOND' | 'CLUB' | 'JOKER';
 export type CardRank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'BLACK' | 'COLOR';
 
+// 기존 인터페이스 (호환성 유지)
 export interface Card {
     id: string;
     suit: CardSuit;
     rank: CardRank;
+}
+
+// Schema v3: Card 클래스 (Colyseus 동기화용)
+export class CardSchema extends Schema implements Card {
+    @type("string") id: string;
+    @type("string") suit: CardSuit;
+    @type("string") rank: CardRank;
+
+    constructor(id?: string, suit?: CardSuit, rank?: CardRank) {
+        super();
+        if (id !== undefined) this.id = id;
+        if (suit !== undefined) this.suit = suit;
+        if (rank !== undefined) this.rank = rank;
+    }
 }
 
 // 카드 효과 타입
@@ -147,6 +168,7 @@ export interface PlayerInfo {
 // 게임 상태
 // ============================================================================
 
+// 기존 인터페이스 (호환성 유지)
 export interface GameState {
     roomId: string;
     status: RoomStatus;
@@ -158,6 +180,34 @@ export interface GameState {
     deckCount: number; // 남은 덱 카드 수
     players: Record<string, PlayerInfo>; // 플레이어 정보 맵 (key: sessionId)
     winnerId: string | null; // 승리한 플레이어 ID
+}
+
+// ============================================================================
+// Schema v3: Colyseus 동기화용 클래스
+// ============================================================================
+
+// Schema v3: Player 클래스 (플레이어 핸드 관리)
+export class PlayerSchema extends Schema {
+    @type([CardSchema]) hand = new ArraySchema<CardSchema>();
+    @type("boolean") isReady: boolean = false;
+    @type("string") nickname: string = "";
+    @type("string") characterId: string = ""; // CharacterId | null을 string으로 저장
+    @type("boolean") isHost: boolean = false;
+    @type("number") skillCooldown: number = 0;
+    @type("number") skillUsesLeft: number = 0;
+}
+
+// Schema v3: GameState 클래스 (게임 전체 상태)
+export class GameStateSchema extends Schema {
+    @type("string") status: string = "LOBBY"; // RoomStatus
+    @type({ map: PlayerSchema }) players = new MapSchema<PlayerSchema>();
+    @type("string") currentTurn: string = ""; // 현재 턴인 플레이어의 sessionId
+    @type("string") direction: string = "clockwise"; // GameDirection
+    @type("number") attackStack: number = 0; // 누적된 공격 카드 수
+    @type(CardSchema) topCard: CardSchema | null = null; // 현재 바닥에 놓인 카드
+    @type("string") selectedSuit: string = ""; // CardSuit | null을 string으로 저장
+    @type("number") deckCount: number = 0; // 남은 덱 카드 수
+    @type("string") winnerId: string = ""; // 승리한 플레이어 ID
 }
 
 // ============================================================================
