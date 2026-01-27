@@ -300,8 +300,28 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 targetPlayerIds: message.targetPlayerIds // Broadcast list too
             } as SkillUsedMessage);
 
+            // 예언자 스킬: 확인한 카드 정보를 예언자에게만 개인 메시지로 전송
+            if (message.skillId === 'prophet' && result.prophetCards) {
+                const targetPlayer = result.targetPlayerId ? this.state.players.get(result.targetPlayerId) : null;
+                const targetPlayerName = targetPlayer?.nickname || '플레이어';
+                client.send("prophet_result", {
+                    cards: result.prophetCards,
+                    targetPlayerId: result.targetPlayerId,
+                    targetPlayerName: targetPlayerName,
+                    totalCards: targetPlayer ? targetPlayer.hand.length : 0
+                });
+            }
+
             if (result.message) {
-                this.broadcast("announcement", `${client.sessionId} used ${message.skillId}: ${result.message}`);
+                // 예언자 스킬의 경우, 다른 플레이어들에게는 일반적인 메시지만 브로드캐스트
+                // (카드 정보는 예언자에게만 전송됨)
+                if (message.skillId === 'prophet') {
+                    const targetPlayer = result.targetPlayerId ? this.state.players.get(result.targetPlayerId) : null;
+                    const targetPlayerName = targetPlayer?.nickname || '플레이어';
+                    this.broadcast("announcement", `${client.sessionId} used ${message.skillId}: Peeked at ${targetPlayerName}'s cards.`);
+                } else {
+                    this.broadcast("announcement", `${client.sessionId} used ${message.skillId}: ${result.message}`);
+                }
             }
 
             // Check Immediate Game End / Elimination from Skill

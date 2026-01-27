@@ -9,6 +9,9 @@ export interface SkillResult {
     isGameEnded?: boolean; // 승리
     eliminatedPlayerIds?: string[]; // 파산
     message?: string; // 클라이언트 알림 메시지
+    // 예언자 스킬용: 확인한 카드 정보
+    prophetCards?: Array<{ id: string; suit: string; rank: string }>; // 다음 플레이어의 카드 3장 (또는 모든 카드)
+    targetPlayerId?: string; // 확인한 플레이어 ID
 }
 
 export class SkillManager {
@@ -171,13 +174,59 @@ export class SkillManager {
                 }
                 break;
 
-            case 'prophet': // 예언자: 다음 플레이어 카드 3장 확인 (통신만 하면 됨, 상태 변경 없음)
-                // 실제 구현은 Room에서 send("prophet_result", ...) 로 처리하거나 여기서 결과 리턴
-                // 여기서는 상태 변경이 없으므로 성공 처리만.
-                // Room에서 별도로 처리하거나, message에 정보를 담을 수 있음.
-                // 하지만 보안상 개인 메시지로 보내야 함.
-                result.message = "Peeked next player's cards.";
-                // (실제 데이터 전송 로직은 Room의 onMessage에서 처리 권장, 혹은 여기서 리턴값에 포함)
+            case 'prophet': // 예언자: 현재 진행방향 기준, 다음 플레이어가 보유한 패 중 랜덤으로 뽑힌 카드 3장 확인
+                // 현재 진행 방향 기준으로 다음 플레이어 찾기
+                const prophetPlayerIds = Array.from(this.state.players.keys());
+                const prophetMyIndex = prophetPlayerIds.indexOf(sessionId);
+                
+                if (prophetMyIndex === -1) {
+                    return { success: false, error: { message: "Player not found" } };
+                }
+                
+                // 방향에 따라 다음 플레이어 인덱스 계산
+                let prophetNextIndex: number;
+                if (this.state.direction === 'clockwise') {
+                    // 시계 방향: 다음 = 오른쪽
+                    prophetNextIndex = (prophetMyIndex + 1) % prophetPlayerIds.length;
+                } else {
+                    // 반시계 방향: 다음 = 왼쪽
+                    prophetNextIndex = (prophetMyIndex - 1 + prophetPlayerIds.length) % prophetPlayerIds.length;
+                }
+                
+                const prophetNextPlayerId = prophetPlayerIds[prophetNextIndex];
+                const prophetNextPlayer = this.state.players.get(prophetNextPlayerId);
+                
+                if (!prophetNextPlayer) {
+                    return { success: false, error: { message: "Next player not found" } };
+                }
+                
+                // 다음 플레이어의 손패에서 랜덤으로 카드 선택
+                const prophetHandArray = Array.from(prophetNextPlayer.hand);
+                const prophetCardsToShow = Math.min(3, prophetHandArray.length); // 3장 또는 모든 카드
+                
+                if (prophetHandArray.length === 0) {
+                    result.message = "Next player has no cards.";
+                    result.targetPlayerId = prophetNextPlayerId;
+                    result.prophetCards = [];
+                } else {
+                    // 랜덤으로 카드 선택 (Fisher-Yates shuffle 사용)
+                    const prophetShuffled = [...prophetHandArray];
+                    for (let i = prophetShuffled.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [prophetShuffled[i], prophetShuffled[j]] = [prophetShuffled[j], prophetShuffled[i]];
+                    }
+                    
+                    // 앞에서 cardsToShow개 선택
+                    const prophetSelectedCards = prophetShuffled.slice(0, prophetCardsToShow).map(card => ({
+                        id: card.id,
+                        suit: card.suit,
+                        rank: card.rank
+                    }));
+                    
+                    result.prophetCards = prophetSelectedCards;
+                    result.targetPlayerId = prophetNextPlayerId;
+                    result.message = `Peeked ${prophetSelectedCards.length} card(s) from next player.`;
+                }
                 break;
 
             case 'shaman': // 주술사: 타겟 지정 (강제 스킬)

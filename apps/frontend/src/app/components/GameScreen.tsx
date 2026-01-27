@@ -23,6 +23,7 @@ import BottomArea from '@/app/components/game/BottomArea';
 import GameEndDialog from '@/app/components/game/GameEndDialog';
 import SuitSelectDialog from '@/app/components/game/SuitSelectDialog';
 import SkillDialog from '@/app/components/game/SkillDialog';
+import PlayingCard from '@/app/components/PlayingCard';
 import { UseSkillMessage } from '@mafia/shared';
 
 interface GameScreenProps {
@@ -131,6 +132,9 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   const [showStatsDialog, setShowStatsDialog] = useState(false);
   const [gameEndData, setGameEndData] = useState<{ myRank: number; winnerId: string; reason: string } | null>(null);
   const [showSkillDialog, setShowSkillDialog] = useState(false);
+  // 예언자 스킬: 확인한 카드 표시
+  const [prophetCards, setProphetCards] = useState<Card[] | null>(null);
+  const [prophetTargetName, setProphetTargetName] = useState<string>('');
   
   // 게임 종료 등수가 이미 설정되었는지 추적 (파산 시 한 번 설정되면 변경되지 않아야 함)
   const gameEndReceivedRef = useRef(false);
@@ -225,6 +229,57 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
         // 7 카드 팝업 닫기 (백엔드에서 랜덤 색깔을 선택하므로 프론트엔드에서는 닫기만 함)
         setShowSuitDialog(false);
       }
+    });
+
+    // 예언자 스킬 결과 수신
+    onMessage<{ 
+      cards: Array<{ id: string; suit: string; rank: string }>; 
+      targetPlayerId?: string; 
+      targetPlayerName?: string;
+      totalCards?: number;
+    }>('prophet_result', (message) => {
+      if (DEBUG) {
+        console.log('[GameScreen] 예언자 스킬 결과:', message);
+      }
+      
+      // 카드 정보를 UI 형식으로 변환
+      const uiCards: Card[] = message.cards.map(card => {
+        // 서버의 suit 형식 (SPADE, HEART, DIAMOND, CLUB, JOKER)을 UI 형식으로 변환
+        let suitUI: 'spades' | 'hearts' | 'diamonds' | 'clubs' | 'joker';
+        switch (card.suit) {
+          case 'SPADE': suitUI = 'spades'; break;
+          case 'HEART': suitUI = 'hearts'; break;
+          case 'DIAMOND': suitUI = 'diamonds'; break;
+          case 'CLUB': suitUI = 'clubs'; break;
+          case 'JOKER': suitUI = 'joker'; break;
+          default: suitUI = 'clubs';
+        }
+        
+        // 조커 카드 처리
+        let rankUI: Card['rank'] = card.rank as Card['rank'];
+        if (card.suit === 'JOKER') {
+          if (card.rank === 'BLACK') {
+            rankUI = 'JOKER_BW';
+          } else if (card.rank === 'COLOR') {
+            rankUI = 'JOKER_COLOR';
+          }
+        }
+        
+        return {
+          id: card.id,
+          suit: suitUI,
+          rank: rankUI
+        };
+      });
+      
+      setProphetCards(uiCards);
+      setProphetTargetName(message.targetPlayerName || '플레이어');
+      
+      // 3초 후 자동으로 사라지기
+      setTimeout(() => {
+        setProphetCards(null);
+        setProphetTargetName('');
+      }, 3000);
     });
   }, [onMessage, sessionId, gameState?.players]);
   
@@ -337,6 +392,26 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
           backgroundImage: 'url(/Game_background.png)',
         }}
       >
+        <style>{`
+          @keyframes fadeInScale {
+            from {
+              opacity: 0;
+              transform: scale(0.8) translateY(10px);
+            }
+            to {
+              opacity: 1;
+              transform: scale(1) translateY(0);
+            }
+          }
+          @keyframes fadeOut {
+            from {
+              opacity: 1;
+            }
+            to {
+              opacity: 0;
+            }
+          }
+        `}</style>
         <ConnectionStatusIndicator status={status} sessionId={sessionId} error={error} />
         <TurnDirectionIndicator direction={direction} />
         {isPlaying && (
@@ -366,6 +441,42 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
           isMyTurn={isMyTurn}
           onDrawCard={handleDrawCard}
         />
+
+        {/* 예언자 스킬: 확인한 카드 표시 (중앙 오른쪽 영역) */}
+        {prophetCards && prophetCards.length > 0 && (
+          <div 
+            className="absolute top-1/2 right-[12%] -translate-y-1/2 z-40"
+            style={{
+              animation: 'fadeInScale 0.3s ease-out, fadeOut 0.3s ease-in 2.7s forwards'
+            }}
+          >
+            <div className="bg-gray-900/95 border-2 border-amber-500 rounded-lg p-4 shadow-2xl backdrop-blur-sm">
+              <div className="text-center mb-3">
+                <p className="text-white text-lg font-bold mb-1">예언자의 통찰</p>
+                <p className="text-amber-300 text-sm">
+                  {prophetTargetName}의 카드 {prophetCards.length}장
+                </p>
+              </div>
+              <div className="flex gap-2 justify-center items-center">
+                {prophetCards.map((card, index) => (
+                  <div
+                    key={card.id || index}
+                    style={{
+                      animation: `fadeInScale 0.3s ease-out ${index * 0.1}s both`
+                    }}
+                  >
+                    <PlayingCard
+                      card={card}
+                      faceDown={false}
+                      className="w-16 sm:w-20"
+                      isPlayable={false}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         <BottomArea
           nickname={nickname}
