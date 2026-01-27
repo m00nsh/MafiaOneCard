@@ -248,7 +248,7 @@ export const GAME_CONSTANTS = {
     SHAMAN_PENALTY: 3, // 주술사 거부 시 페널티: 3장
 
     // 시스템 설정
-    ENABLE_BOTS: false, // AI 봇 활성화 여부 (디버깅용)
+    ENABLE_BOTS: true, // AI 봇 활성화 여부 (디버깅용)
 } as const;
 
 // ============================================================================
