@@ -168,6 +168,7 @@ export default function App() {
           playerCount={gameState.playerCount}
           selectedCharacters={gameState.selectedCharacters}
           nickname={gameState.nickname}
+          gameMode={gameState.gameMode || undefined}
           onBackToMain={() => navigateToScreen('main')}
         />
       )}

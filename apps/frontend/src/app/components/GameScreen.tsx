@@ -30,10 +30,11 @@ interface GameScreenProps {
   playerCount: number;
   selectedCharacters: string[];
   nickname: string;
+  gameMode?: 'quick' | 'custom';
   onBackToMain?: () => void;
 }
 
-export default function GameScreen({ playerCount: initialPlayerCount = 4, selectedCharacters, nickname, onBackToMain }: GameScreenProps) {
+export default function GameScreen({ playerCount: initialPlayerCount = 4, selectedCharacters, nickname, gameMode, onBackToMain }: GameScreenProps) {
   // Colyseus 연결
   const { status, sessionId, gameState, connect, error, sendMessage, onMessage } = useColyseusRoom();
   const { showError } = useToast();
@@ -461,7 +462,8 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
           />
         )}
 
-        {isLobby && (
+        {/* 빠른 게임 모드에서는 로비 UI를 표시하지 않음 (자동 시작) */}
+        {isLobby && gameMode !== 'quick' && (
           <LobbyUI
             currentPlayerCount={currentPlayerCount}
             allPlayersReady={allPlayersReady}
