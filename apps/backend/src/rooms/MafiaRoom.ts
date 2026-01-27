@@ -326,7 +326,8 @@ export class MafiaRoom extends Room<GameStateSchema> {
             } as SkillUsedMessage);
 
             // 예언자 스킬: 확인한 카드 정보를 예언자에게만 개인 메시지로 전송
-            if (message.skillId === 'prophet' && result.prophetCards) {
+            // 소환사가 예언자 스킬을 복사한 경우에도 동일하게 처리
+            if (result.prophetCards) {
                 const targetPlayer = result.targetPlayerId ? this.state.players.get(result.targetPlayerId) : null;
                 const targetPlayerName = targetPlayer?.nickname || '플레이어';
                 client.send("prophet_result", {
@@ -338,12 +339,13 @@ export class MafiaRoom extends Room<GameStateSchema> {
             }
 
             if (result.message) {
-                // 예언자 스킬의 경우, 다른 플레이어들에게는 일반적인 메시지만 브로드캐스트
-                // (카드 정보는 예언자에게만 전송됨)
-                if (message.skillId === 'prophet') {
+                // 예언자 스킬의 경우 (소환사가 복사한 경우 포함), 다른 플레이어들에게는 일반적인 메시지만 브로드캐스트
+                // (카드 정보는 예언자/소환사에게만 전송됨)
+                if (result.prophetCards) {
                     const targetPlayer = result.targetPlayerId ? this.state.players.get(result.targetPlayerId) : null;
                     const targetPlayerName = targetPlayer?.nickname || '플레이어';
-                    this.broadcast("announcement", `${client.sessionId} used ${message.skillId}: Peeked at ${targetPlayerName}'s cards.`);
+                    const skillName = message.skillId === 'summoner' ? 'prophet (via summoner)' : message.skillId;
+                    this.broadcast("announcement", `${client.sessionId} used ${skillName}: Peeked at ${targetPlayerName}'s cards.`);
                 } else {
                     this.broadcast("announcement", `${client.sessionId} used ${message.skillId}: ${result.message}`);
                 }
