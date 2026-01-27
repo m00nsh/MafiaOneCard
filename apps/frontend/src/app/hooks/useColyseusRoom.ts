@@ -180,6 +180,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
             skillUsesLeft: myPlayerData.skillUsesLeft || 0,
             skillProgress: myPlayerData.skillProgress || 0,
             skillMaxCooldown: myPlayerData.skillMaxCooldown || 0,
+            activeEffects: Array.from(myPlayerData.activeEffects || []), // activeEffects 추가
           };
         }
 
@@ -208,6 +209,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
               skillUsesLeft: playerData.skillUsesLeft || 0,
               skillProgress: playerData.skillProgress || 0,
               skillMaxCooldown: playerData.skillMaxCooldown || 0,
+              activeEffects: Array.from(playerData.activeEffects || []), // activeEffects 추가
             });
           }
         });

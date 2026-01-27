@@ -214,6 +214,21 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
       }
     });
 
+    // 주술사 강제 스킬 신호 수신
+    onMessage<{ 
+      skillId: string;
+      message: string;
+    }>('shaman_force_skill', (message) => {
+      if (DEBUG) {
+        console.log('[GameScreen] 주술사 강제 스킬 신호:', message);
+      }
+      
+      // 내 턴이고 게임 중이면 스킬 다이얼로그 강제로 열기
+      if (isMyTurn && isPlaying) {
+        setShowSkillDialog(true);
+      }
+    });
+
     // 공지사항 알림 (토스트 제거, 콘솔 로그만)
     onMessage<{ message: string; type?: 'info' | 'warning' | 'error' | 'success' }>('announcement', (announcement) => {
       if (DEBUG) {
@@ -228,6 +243,21 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
         setShowSkillDialog(false);
         // 7 카드 팝업 닫기 (백엔드에서 랜덤 색깔을 선택하므로 프론트엔드에서는 닫기만 함)
         setShowSuitDialog(false);
+      }
+    });
+
+    // 주술사 강제 스킬 신호 수신
+    onMessage<{ 
+      skillId: string;
+      message: string;
+    }>('shaman_force_skill', (message) => {
+      if (DEBUG) {
+        console.log('[GameScreen] 주술사 강제 스킬 신호:', message);
+      }
+      
+      // 내 턴이고 게임 중이면 스킬 다이얼로그 강제로 열기
+      if (isMyTurn && isPlaying) {
+        setShowSkillDialog(true);
       }
     });
 
@@ -281,7 +311,20 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
         setProphetTargetName('');
       }, 3000);
     });
-  }, [onMessage, sessionId, gameState?.players]);
+  }, [onMessage, sessionId, gameState?.players, isMyTurn, isPlaying]);
+
+  // 주술사 강제 스킬: 내 턴이 시작되고 activeEffects에 shaman_forced_skill이 있으면 스킬 다이얼로그 자동 열기
+  useEffect(() => {
+    if (!isMyTurn || !isPlaying || !gameState?.myPlayer) return;
+    
+    const myPlayer = gameState.myPlayer;
+    if (myPlayer.activeEffects && myPlayer.activeEffects.includes('shaman_forced_skill')) {
+      if (DEBUG) {
+        console.log('[GameScreen] 주술사 강제 스킬 효과 감지, 스킬 다이얼로그 자동 열기');
+      }
+      setShowSkillDialog(true);
+    }
+  }, [isMyTurn, isPlaying, gameState?.myPlayer, DEBUG]);
   
   const handleToggleReady = () => {
     if (!isLobby) return;

@@ -152,6 +152,8 @@ export class OneCardEngine {
         // 3. 턴 넘기기
         // K(King) 카드를 낸 경우(shouldKeepTurn)에는 턴을 넘기지 않음
         if (!shouldKeepTurn) {
+            // 주의: nextTurn() 호출 전에 주술사 강제 스킬 체크는 MafiaRoom에서 처리됨
+            // (OneCardEngine은 Room 인스턴스에 접근할 수 없으므로)
             this.turnManager.nextTurn(shouldSkipTurn);
         }
     }

@@ -20,6 +20,9 @@ export class MafiaRoom extends Room<GameStateSchema> {
     
     // Game Mode
     private gameMode: 'quick' | 'custom' = 'custom';
+    
+    // 이전 턴 플레이어 ID (주술사 강제 스킬 체크용)
+    private previousTurnPlayerId: string | null = null;
 
     onCreate(options: any) {
         // 1. State Initialization
@@ -55,6 +58,14 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 this.handleGameEnd(playerId);
                 return;
             }
+
+            // 턴이 넘어가기 전 이전 플레이어의 주술사 강제 스킬 체크
+            if (this.previousTurnPlayerId && this.previousTurnPlayerId !== playerId) {
+                this.checkShamanForcedSkillBeforeTurnEnd(this.previousTurnPlayerId);
+            }
+
+            // 이전 턴 플레이어 ID 업데이트
+            this.previousTurnPlayerId = playerId;
 
             this.skillManager.onTurnStart(playerId);
 
@@ -142,6 +153,15 @@ export class MafiaRoom extends Room<GameStateSchema> {
             this.state.attackStack = 0;
             this.state.deckCount = this.deck.count;
             this.broadcast("announcement", `${player.nickname} timed out and drew ${cardsToDraw} card(s) due to attack stack.`);
+            this.turnManager.nextTurn();
+            return;
+        }
+
+        // 주술사 강제 스킬이 있는 경우 처리 (타이머 만료 시)
+        // 일반적으로는 checkShamanForcedSkillBeforeTurnEnd에서 처리되지만,
+        // 타이머 만료 시에는 여기서도 체크
+        if (player.activeEffects.includes("shaman_forced_skill")) {
+            this.checkShamanForcedSkillBeforeTurnEnd(playerId);
             this.turnManager.nextTurn();
             return;
         }
@@ -254,6 +274,9 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 });
                 this.broadcast("announcement", `${client.sessionId} played a card!`);
 
+                // 주의: 카드 내기 시 주술사 강제 스킬 체크는 onTurnChange 콜백에서 처리됨
+                // (OneCardEngine에서 nextTurn()을 호출하므로, onTurnChange에서 이전 플레이어를 체크)
+
                 // 타이머 재시작 (K 카드로 턴이 넘어가지 않아도 타이머는 재시작)
                 // nextTurn()이 호출되지 않았을 수 있으므로 명시적으로 타이머 재시작
                 if (this.state.status === "PLAYING" && this.state.currentTurn === client.sessionId) {
@@ -348,7 +371,8 @@ export class MafiaRoom extends Room<GameStateSchema> {
 
     /**
      * 주술사 강제 스킬 처리
-     * 타겟 플레이어의 턴이 시작되면 자동으로 스킬을 사용함 (거부권 없음)
+     * 타겟 플레이어의 턴이 시작되면 클라이언트에게 스킬 사용 신호를 보냄
+     * 프론트엔드에서 팝업을 강제로 열어 사용자가 선택할 수 있도록 함
      */
     private handleShamanForcedSkill(playerId: string): void {
         const player = this.state.players.get(playerId);
@@ -386,84 +410,53 @@ export class MafiaRoom extends Room<GameStateSchema> {
             }
         }
 
-        // 자동으로 스킬 사용
-        // 타겟이 필요한 스킬의 경우 랜덤 선택 (봇 로직 활용)
-        let targetId: string | undefined;
-        let selectedCardId: string | undefined;
-        let targetIds: string[] | undefined;
-
-        // 타겟이 필요한 스킬 처리
-        if (skillId === 'merchant' || skillId === 'shaman' || skillId === 'summoner' || skillId === 'assassin') {
-            // 랜덤 타겟 선택 (본인 제외)
-            const opponents = Array.from(this.state.players.entries())
-                .filter(([id]) => id !== playerId)
-                .map(([id]) => id);
-            if (opponents.length > 0) {
-                targetId = opponents[Math.floor(Math.random() * opponents.length)];
-            }
-        } else if (skillId === 'berserker') {
-            // 광전사: 2명 선택 (2인 플레이에서는 1명)
-            const opponents = Array.from(this.state.players.entries())
-                .filter(([id]) => id !== playerId)
-                .map(([id]) => id);
-            const targetCount = opponents.length >= 2 ? 2 : 1;
-            targetIds = opponents.slice(0, targetCount);
-        }
-
-        // 잡상인: 카드 선택
-        if (skillId === 'merchant' && player.hand.length > 0) {
-            const randomCardIndex = Math.floor(Math.random() * player.hand.length);
-            selectedCardId = Array.from(player.hand)[randomCardIndex].id;
-        }
-
-        // 스킬 실행
-        const result = this.skillManager.useSkill(playerId, skillId, targetId, selectedCardId, targetIds);
-        
-        if (result.success) {
-            // 스킬 사용 성공 알림
-            this.broadcast("skill_used", {
-                playerId: playerId,
+        // 클라이언트에게 스킬 사용 신호 전송 (팝업 강제 오픈)
+        const client = Array.from(this.clients.values()).find(c => c.sessionId === playerId);
+        if (client) {
+            client.send("shaman_force_skill", {
                 skillId: skillId,
-                targetPlayerId: targetId,
-                targetPlayerIds: targetIds
+                message: "주술사에 의해 스킬을 사용해야 합니다."
             });
+        }
+    }
 
-            // 예언자 스킬 결과 전송
-            if (skillId === 'prophet' && result.prophetCards) {
-                const targetPlayer = result.targetPlayerId ? this.state.players.get(result.targetPlayerId) : null;
-                const targetPlayerName = targetPlayer?.nickname || '플레이어';
-                const client = Array.from(this.clients.values()).find(c => c.sessionId === playerId);
-                if (client) {
-                    client.send("prophet_result", {
-                        cards: result.prophetCards,
-                        targetPlayerId: result.targetPlayerId,
-                        targetPlayerName: targetPlayerName,
-                        totalCards: targetPlayer ? targetPlayer.hand.length : 0
-                    });
-                }
-            }
+    /**
+     * 턴이 넘어가기 전 주술사 강제 스킬 사용 여부 체크
+     * 스킬을 사용하지 않았다면 카드 3장을 지급 (일반 카드 뽑기와 별개)
+     */
+    private checkShamanForcedSkillBeforeTurnEnd(playerId: string): void {
+        const player = this.state.players.get(playerId);
+        if (!player || !player.activeEffects.includes("shaman_forced_skill")) return;
 
-            // 게임 종료 체크
-            if (result.isGameEnded) {
-                this.handleGameEnd(this.state.winnerId);
+        // 스킬을 사용하지 않았으므로 페널티 적용
+        console.log(`${playerId} did not use skill -> Applying Shaman Penalty (3 cards)`);
+        
+        const penaltyCount = 3;
+        for (let i = 0; i < penaltyCount; i++) {
+            if (this.deck.count === 0) {
+                this.deck.replenish();
+                if (this.deck.count === 0) break;
             }
-            if (result.eliminatedPlayerIds && result.eliminatedPlayerIds.length > 0) {
-                // 파산 처리
-                result.eliminatedPlayerIds.forEach(eliminatedId => {
-                    const eliminatedClient = Array.from(this.clients.values()).find(c => c.sessionId === eliminatedId);
-                    if (eliminatedClient) {
-                        eliminatedClient.send("game_end", {
-                            winnerId: this.state.winnerId,
-                            myRank: 0 // 파산한 플레이어는 0등
-                        });
-                        eliminatedClient.leave(1000, "Burst");
-                    }
-                });
+            const card = this.deck.draw();
+            if (card) {
+                player.hand.push(new CardSchema(card.id, card.suit, card.rank));
             }
-        } else {
-            // 스킬 사용 실패 시 효과 제거
-            const idx = player.activeEffects.indexOf("shaman_forced_skill");
-            if (idx !== -1) player.activeEffects.splice(idx, 1);
+        }
+        
+        this.state.deckCount = this.deck.count;
+        
+        // 효과 제거
+        const idx = player.activeEffects.indexOf("shaman_forced_skill");
+        if (idx !== -1) player.activeEffects.splice(idx, 1);
+        
+        this.broadcast("announcement", `${player.nickname} did not use skill and drew 3 cards due to shaman forced skill.`);
+        
+        // 파산 체크
+        if (player.hand.length > GAME_CONSTANTS.MAX_HAND_SIZE) {
+            const client = Array.from(this.clients.values()).find(c => c.sessionId === playerId);
+            if (client) {
+                this.handlePlayerElimination(client, 'burst');
+            }
         }
     }
 
@@ -500,6 +493,9 @@ export class MafiaRoom extends Room<GameStateSchema> {
         });
 
         console.log(`${client.sessionId} drew ${drawnCards.length} cards.`);
+
+        // 턴이 넘어가기 전 주술사 강제 스킬 체크
+        this.checkShamanForcedSkillBeforeTurnEnd(client.sessionId);
 
         this.turnManager.nextTurn();
 
@@ -586,8 +582,14 @@ export class MafiaRoom extends Room<GameStateSchema> {
             const firstPlayerId = Array.from(this.state.players.keys())[0];
             this.state.currentTurn = firstPlayerId;
 
+            // 이전 턴 플레이어 ID 초기화 (첫 턴이므로 null)
+            this.previousTurnPlayerId = null;
+
             // Start turn for first player (triggers cooldown update for them)
             this.skillManager.onTurnStart(firstPlayerId);
+
+            // 주술사 강제 스킬 처리 (턴 시작 시 자동 스킬 사용)
+            this.handleShamanForcedSkill(firstPlayerId);
 
             // 첫 번째 플레이어도 10초 타이머 시작
             this.startTimer(10, () => this.handleTurnTimeout(firstPlayerId));

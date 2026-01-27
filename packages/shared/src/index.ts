@@ -164,6 +164,7 @@ export interface PlayerInfo {
     skillUsesLeft?: number; // 남은 스킬 사용 횟수 (소환사, 광전사)
     skillProgress?: number; // 현재 스킬 진행도 (0 ~ skillMaxCooldown)
     skillMaxCooldown?: number; // 최대 스킬 쿨타임
+    activeEffects?: string[]; // 활성 효과 (예: "shaman_forced_skill")
 }
 
 // ============================================================================
