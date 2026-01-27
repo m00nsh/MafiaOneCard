@@ -1,9 +1,10 @@
-import { Room, Client } from "colyseus";
+import { Room, Client, Delayed } from "colyseus";
 import { CardSchema, PlayerSchema, GameStateSchema, CardSuit, ErrorCode, GAME_CONSTANTS, CharacterId, CHARACTER_SKILLS, UseSkillMessage, SkillUsedMessage } from "@mafia/shared";
 import { Deck } from "../entities/Deck";
 import { TurnManager } from "../engine/TurnManager";
 import { OneCardEngine } from "../engine/OneCardEngine";
 import { SkillManager } from "../engine/SkillManager";
+import { BotManager } from "../engine/BotManager";
 
 export class MafiaRoom extends Room<GameStateSchema> {
 
@@ -12,6 +13,10 @@ export class MafiaRoom extends Room<GameStateSchema> {
     private turnManager!: TurnManager;
     private engine!: OneCardEngine;
     private skillManager!: SkillManager;
+    private botManager!: BotManager;
+
+    // Timer
+    private currentTimer?: Delayed;
 
     onCreate(options: any) {
         // 1. State Initialization
@@ -27,16 +32,107 @@ export class MafiaRoom extends Room<GameStateSchema> {
         this.turnManager = new TurnManager(this.state);
         this.engine = new OneCardEngine(this.state, this.deck, this.turnManager);
         this.skillManager = new SkillManager(this.state, this.deck, this.turnManager, this.engine);
+        this.botManager = new BotManager(this.state, this.engine);
 
-        // Turn Listener for Cooldowns
+        // Turn Listener for Cooldowns & Timer
         this.turnManager.onTurnChange = (playerId) => {
             this.skillManager.onTurnStart(playerId);
+
+            // Turn Timer (10s)
+            this.startTimer(10, () => this.handleTurnTimeout(playerId));
+
+            // Bot Action
+            if (this.botManager.isBot(playerId)) {
+                this.clock.setTimeout(() => this.processBotTurn(playerId), 1000);
+            }
         };
 
-        console.log("MafiaRoom created with modular architecture + Skills!");
+        // 4. Lobby Timer (Quick Mode)
+        if (options.mode === 'quick' || !options.mode) {
+            this.startTimer(10, () => this.fillBotsAndStart());
+        }
+    }
 
-        // 3. Message Handlers
-        this.setupMessageHandlers();
+    private startTimer(seconds: number, callback: Function) {
+        if (this.currentTimer) this.currentTimer.clear();
+
+        this.state.timerEndTime = Date.now() + (seconds * 1000);
+        this.currentTimer = this.clock.setTimeout(() => {
+            this.clearTimer();
+            callback();
+        }, seconds * 1000);
+    }
+
+    private clearTimer() {
+        if (this.currentTimer) {
+            this.currentTimer.clear();
+            this.currentTimer = undefined;
+        }
+        this.state.timerEndTime = 0;
+    }
+
+    private handleTurnTimeout(playerId: string) {
+        console.log(`Turn timeout for ${playerId}`);
+        // Force Draw 1 Card & Next Turn
+        const player = this.state.players.get(playerId);
+        if (!player) return;
+
+        // Reuse Draw Logic (Simplified)
+        if (this.deck.count === 0) this.deck.replenish();
+        const card = this.deck.draw();
+        if (card) player.hand.push(new CardSchema(card.id, card.suit, card.rank));
+
+        this.state.deckCount = this.deck.count;
+        this.broadcast("announcement", `${player.nickname} timed out and drew a card.`);
+
+        this.turnManager.nextTurn();
+    }
+
+    private processBotTurn(botId: string) {
+        if (this.state.status !== "PLAYING" || this.state.currentTurn !== botId) return;
+
+        const action = this.botManager.decideAction(botId);
+        if (!action) return;
+
+        if (action.type === 'play' && action.payload) {
+            const result = this.engine.processCardPlay(botId, action.payload.cardId, action.payload.selectedSuit);
+            if (result.success) {
+                this.state.deckCount = this.deck.count;
+                this.broadcast("card_play_response", { success: true, newTopCard: this.state.topCard });
+                this.broadcast("announcement", `${botId} played a card.`);
+                if (result.isGameEnded) this.handleGameEnd(this.state.winnerId);
+            } else {
+                this.handleTurnTimeout(botId);
+            }
+        } else {
+            this.handleTurnTimeout(botId);
+        }
+    }
+
+    private fillBotsAndStart() {
+        if (this.state.status !== "LOBBY") return;
+
+        console.log("Lobby timeout -> Filling bots...");
+
+        const currentCount = this.state.players.size;
+        const targetCount = GAME_CONSTANTS.MAX_PLAYERS;
+
+        if (currentCount >= targetCount) {
+            this.startGame();
+            return;
+        }
+
+        const needed = targetCount - currentCount;
+        const existingIds = Array.from(this.state.players.keys());
+
+        for (let i = 0; i < needed; i++) {
+            const { sessionId, player } = this.botManager.createBot(existingIds);
+            this.state.players.set(sessionId, player);
+            existingIds.push(sessionId);
+        }
+
+        this.broadcast("announcement", `Added ${needed} AI bots.`);
+        this.startGame();
     }
 
     private setupMessageHandlers() {
