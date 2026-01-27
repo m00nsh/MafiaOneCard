@@ -1,15 +1,8 @@
 import { useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import { PlayerInfo } from '@mafia/shared';
 import { CHARACTER_SKILLS, CharacterId } from '@mafia/shared';
+import GameModal, { GameModalHeader, GameModalTitle, GameModalDescription, GameModalFooter } from './GameModal';
 
 interface PlayerSelectDialogProps {
   open: boolean;
@@ -81,77 +74,81 @@ export default function PlayerSelectDialog({
   const isConfirmDisabled = selectedPlayerIds.length !== targetCount;
 
   return (
-    <Dialog open={open} onOpenChange={handleCancel}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle className="text-2xl">
-            {skillName} - 대상 플레이어 선택
-          </DialogTitle>
-          <DialogDescription className="text-base mt-2">
-            {targetCount === 1
-              ? '대상 플레이어 1명을 선택해주세요.'
-              : '대상 플레이어 2명을 선택해주세요.'}
-          </DialogDescription>
-        </DialogHeader>
+    <GameModal open={open} onClose={handleCancel} width={580}>
+      <GameModalHeader>
+        <GameModalTitle className="text-[26px]">
+          {skillName} - 대상 플레이어 선택
+        </GameModalTitle>
+        <GameModalDescription className="text-[16px]">
+          {targetCount === 1
+            ? '대상 플레이어 1명을 선택해주세요.'
+            : '대상 플레이어 2명을 선택해주세요.'}
+        </GameModalDescription>
+      </GameModalHeader>
 
-        <div className="py-4">
-          <div className="grid grid-cols-1 gap-3">
-            {availablePlayers.map(({ id, player }) => {
-              const isSelected = selectedPlayerIds.includes(id);
-              const characterName = player.characterId
-                ? CHARACTER_SKILLS[player.characterId as CharacterId]?.name || '캐릭터'
-                : '캐릭터';
+      <div className="py-2">
+        <div className="grid grid-cols-1 gap-4 max-h-[320px] overflow-y-auto pr-2">
+          {availablePlayers.map(({ id, player }) => {
+            const isSelected = selectedPlayerIds.includes(id);
+            const characterName = player.characterId
+              ? CHARACTER_SKILLS[player.characterId as CharacterId]?.name || '캐릭터'
+              : '캐릭터';
 
-              return (
-                <button
-                  key={id}
-                  onClick={() => handlePlayerClick(id)}
-                  className={`p-4 rounded-lg border-2 transition-all text-left ${
-                    isSelected
-                      ? 'border-purple-600 bg-purple-50 dark:bg-purple-900/20'
-                      : 'border-gray-300 dark:border-gray-600 hover:border-purple-400 bg-white dark:bg-gray-800'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-lg">{player.nickname || `Player ${id.slice(0, 8)}`}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {characterName} · 카드 {player.handCount || 0}장
-                      </p>
-                    </div>
-                    {isSelected && (
-                      <div className="w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center">
-                        <span className="text-white text-sm font-bold">✓</span>
-                      </div>
-                    )}
+            return (
+              <button
+                key={id}
+                onClick={() => handlePlayerClick(id)}
+                className={`p-5 rounded-lg border-2 transition-all text-left ${
+                  isSelected
+                    ? 'border-purple-600 bg-purple-100 dark:bg-purple-900/40'
+                    : 'border-amber-300 dark:border-amber-600 hover:border-purple-400 bg-amber-100/50 dark:bg-amber-900/30'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-bold text-[18px] text-amber-900 dark:text-amber-100">
+                      {player.nickname || `Player ${id.slice(0, 8)}`}
+                    </p>
+                    <p className="text-[15px] text-amber-700 dark:text-amber-300">
+                      {characterName} · 카드 {player.handCount || 0}장
+                    </p>
                   </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {selectedPlayerIds.length > 0 && (
-            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-              <p className="text-sm text-blue-700 dark:text-blue-300">
-                선택된 플레이어: {selectedPlayerIds.length}/{targetCount}
-              </p>
-            </div>
-          )}
+                  {isSelected && (
+                    <div className="w-[28px] h-[28px] rounded-full bg-purple-600 flex items-center justify-center">
+                      <span className="text-white text-[16px] font-bold">✓</span>
+                    </div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
-            취소
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={isConfirmDisabled}
-            className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50"
-          >
-            확인 ({selectedPlayerIds.length}/{targetCount})
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        {selectedPlayerIds.length > 0 && (
+          <div className="mt-4 p-4 bg-blue-100/80 dark:bg-blue-900/30 rounded-lg border border-blue-400">
+            <p className="text-[16px] text-blue-700 dark:text-blue-300">
+              선택된 플레이어: {selectedPlayerIds.length}/{targetCount}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <GameModalFooter>
+        <Button 
+          variant="outline" 
+          onClick={handleCancel}
+          className="px-8 py-3 text-[16px] border-amber-400 text-amber-800 hover:bg-amber-200"
+        >
+          취소
+        </Button>
+        <Button
+          onClick={handleConfirm}
+          disabled={isConfirmDisabled}
+          className="px-8 py-3 text-[16px] bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
+        >
+          확인 ({selectedPlayerIds.length}/{targetCount})
+        </Button>
+      </GameModalFooter>
+    </GameModal>
   );
 }

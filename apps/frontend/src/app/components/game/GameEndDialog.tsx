@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
+import GameModal, { GameModalHeader, GameModalTitle, GameModalFooter } from './GameModal';
 
 interface GameEndData {
   myRank: number;
@@ -25,43 +25,43 @@ export default function GameEndDialog({
   onConfirm 
 }: GameEndDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-gray-800 text-white border-gray-700">
-        <DialogHeader>
-          <DialogTitle className="text-white text-2xl">게임 종료</DialogTitle>
-        </DialogHeader>
-        <div className="py-6 space-y-4">
-          {gameEndData && (
-            <>
-              <div className="text-center">
-                <p className="text-3xl font-bold mb-2">
-                  {gameEndData.myRank === 1 ? '🎉 1등!' : `${gameEndData.myRank}등`}
-                </p>
-                <p className="text-gray-400 text-sm">
-                  {gameEndData.reason === 'hand_empty' && '모든 카드를 소진했습니다'}
-                  {gameEndData.reason === 'burst' && '파산했습니다'}
-                  {gameEndData.reason === 'player_left' && '플레이어가 나갔습니다'}
-                </p>
-              </div>
-              <div className="border-t border-gray-700 pt-4">
-                <p className="text-center text-gray-300 text-sm">
-                  {gameEndData.winnerId === sessionId 
-                    ? '축하합니다! 승리하셨습니다!' 
-                    : '다음 게임에서 더 좋은 성적을 거두세요!'}
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-        <div className="flex justify-end pt-4">
-          <button
-            onClick={onConfirm}
-            className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-bold transition-colors"
-          >
-            확인
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <GameModal open={open} onClose={() => onOpenChange(false)} width={500}>
+      <GameModalHeader>
+        <GameModalTitle className="text-[28px] text-center">게임 종료</GameModalTitle>
+      </GameModalHeader>
+      
+      <div className="py-6 space-y-5">
+        {gameEndData && (
+          <>
+            <div className="text-center">
+              <p className="text-[40px] font-bold mb-3 text-amber-900 dark:text-amber-100">
+                {gameEndData.myRank === 1 ? '🎉 1등!' : `${gameEndData.myRank}등`}
+              </p>
+              <p className="text-amber-700 dark:text-amber-300 text-[16px]">
+                {gameEndData.reason === 'hand_empty' && '모든 카드를 소진했습니다'}
+                {gameEndData.reason === 'burst' && '파산했습니다'}
+                {gameEndData.reason === 'player_left' && '플레이어가 나갔습니다'}
+              </p>
+            </div>
+            <div className="border-t border-amber-300 dark:border-amber-600 pt-5">
+              <p className="text-center text-amber-800 dark:text-amber-200 text-[16px]">
+                {gameEndData.winnerId === sessionId 
+                  ? '축하합니다! 승리하셨습니다!' 
+                  : '다음 게임에서 더 좋은 성적을 거두세요!'}
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+      
+      <GameModalFooter className="justify-center">
+        <button
+          onClick={onConfirm}
+          className="bg-purple-600 hover:bg-purple-500 text-white px-10 py-3 rounded-lg text-[18px] font-bold transition-colors"
+        >
+          확인
+        </button>
+      </GameModalFooter>
+    </GameModal>
   );
 }

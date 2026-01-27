@@ -331,42 +331,43 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
           isPlaying={isPlaying}
           onSkillClick={handleSkillClick}
         />
+
+        {/* 모든 다이얼로그는 게임 컨텐츠 내부에 배치되어야 LandscapeLayout 중앙에 표시됨 */}
+        <GameEndDialog
+          open={showStatsDialog}
+          onOpenChange={setShowStatsDialog}
+          gameEndData={gameEndData}
+          sessionId={sessionId}
+          onConfirm={() => {
+            setShowStatsDialog(false);
+            if (onBackToMain) {
+              onBackToMain();
+            }
+          }}
+        />
+
+        <SuitSelectDialog
+          open={showSuitDialog}
+          onOpenChange={setShowSuitDialog}
+          onSelect={handleSuitSelect}
+        />
+
+        {/* 스킬 사용 다이얼로그 */}
+        <SkillDialog
+          open={showSkillDialog}
+          onOpenChange={setShowSkillDialog}
+          characterId={myCharacterId}
+          skillProgress={skillProgress}
+          skillMaxCooldown={skillMaxCooldown}
+          skillUsesLeft={skillUsesLeft}
+          players={gameState?.players || new Map()}
+          myId={myId}
+          myHand={myHand}
+          playerCount={currentPlayerCount}
+          attackStack={attackStack}
+          onConfirm={handleSkillConfirm}
+        />
       </div>
-
-      <GameEndDialog
-        open={showStatsDialog}
-        onOpenChange={setShowStatsDialog}
-        gameEndData={gameEndData}
-        sessionId={sessionId}
-        onConfirm={() => {
-          setShowStatsDialog(false);
-          if (onBackToMain) {
-            onBackToMain();
-          }
-        }}
-      />
-
-      <SuitSelectDialog
-        open={showSuitDialog}
-        onOpenChange={setShowSuitDialog}
-        onSelect={handleSuitSelect}
-      />
-
-      {/* 스킬 사용 다이얼로그 */}
-      <SkillDialog
-        open={showSkillDialog}
-        onOpenChange={setShowSkillDialog}
-        characterId={myCharacterId}
-        skillProgress={skillProgress}
-        skillMaxCooldown={skillMaxCooldown}
-        skillUsesLeft={skillUsesLeft}
-        players={gameState?.players || new Map()}
-        myId={myId}
-        myHand={myHand}
-        playerCount={currentPlayerCount}
-        attackStack={attackStack}
-        onConfirm={handleSkillConfirm}
-      />
     </LandscapeLayout>
   );
 }

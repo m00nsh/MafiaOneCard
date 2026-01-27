@@ -1,15 +1,8 @@
 import { useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import PlayingCard from '@/app/components/PlayingCard';
 import { Card } from '@/app/utils/gameLogic';
+import GameModal, { GameModalHeader, GameModalTitle, GameModalDescription, GameModalFooter } from './GameModal';
 
 interface CardSelectDialogProps {
   open: boolean;
@@ -48,63 +41,63 @@ export default function CardSelectDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleCancel}>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle className="text-2xl">카드 선택</DialogTitle>
-          <DialogDescription className="text-base mt-2">
-            넘길 카드를 선택해주세요.
-          </DialogDescription>
-        </DialogHeader>
+    <GameModal open={open} onClose={handleCancel} width={800}>
+      <GameModalHeader>
+        <GameModalTitle className="text-[26px]">카드 선택</GameModalTitle>
+        <GameModalDescription className="text-[16px]">넘길 카드를 선택해주세요.</GameModalDescription>
+      </GameModalHeader>
 
-        <div className="py-4">
-          <div className="flex flex-wrap gap-3 justify-center max-h-[400px] overflow-y-auto p-4">
-            {cards.map((card) => {
-              const isSelected = selectedCardId === card.id;
-              return (
-                <div
-                  key={card.id}
-                  onClick={() => handleCardClick(card.id)}
-                  className={`cursor-pointer transition-all transform ${
-                    isSelected
-                      ? 'scale-110 ring-4 ring-purple-600 z-10'
-                      : 'hover:scale-105'
-                  }`}
-                >
-                  <PlayingCard
-                    card={card}
-                    isPlayable={true}
-                    onClick={() => {}}
-                    className="shadow-lg"
-                    style={{ width: '6rem' }}
-                  />
-                </div>
-              );
-            })}
-          </div>
-
-          {selectedCardId && (
-            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-center">
-              <p className="text-sm text-blue-700 dark:text-blue-300">
-                카드를 선택했습니다.
-              </p>
-            </div>
-          )}
+      <div className="py-2">
+        <div className="flex flex-wrap gap-4 justify-center max-h-[360px] overflow-y-auto p-5 bg-amber-100/50 dark:bg-amber-900/30 rounded-lg">
+          {cards.map((card) => {
+            const isSelected = selectedCardId === card.id;
+            return (
+              <div
+                key={card.id}
+                onClick={() => handleCardClick(card.id)}
+                className={`cursor-pointer transition-all transform ${
+                  isSelected
+                    ? 'scale-110 ring-4 ring-purple-600 z-10'
+                    : 'hover:scale-105'
+                }`}
+              >
+                <PlayingCard
+                  card={card}
+                  isPlayable={true}
+                  onClick={() => {}}
+                  className="shadow-lg"
+                  style={{ width: '90px' }}
+                />
+              </div>
+            );
+          })}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
-            취소
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={!selectedCardId}
-            className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50"
-          >
-            확인
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        {selectedCardId && (
+          <div className="mt-4 p-4 bg-green-100/80 dark:bg-green-900/30 rounded-lg text-center border border-green-400">
+            <p className="text-[16px] text-green-700 dark:text-green-300">
+              ✓ 카드를 선택했습니다.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <GameModalFooter>
+        <Button 
+          variant="outline" 
+          onClick={handleCancel}
+          className="px-8 py-3 text-[16px] border-amber-400 text-amber-800 hover:bg-amber-200"
+        >
+          취소
+        </Button>
+        <Button
+          onClick={handleConfirm}
+          disabled={!selectedCardId}
+          className="px-8 py-3 text-[16px] bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50"
+        >
+          확인
+        </Button>
+      </GameModalFooter>
+    </GameModal>
   );
 }

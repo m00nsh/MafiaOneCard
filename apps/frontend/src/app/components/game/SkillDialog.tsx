@@ -1,18 +1,11 @@
 import { useState, useEffect } from 'react';
 import { CharacterId, CHARACTER_SKILLS, UseSkillMessage, PlayerInfo } from '@mafia/shared';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import { getSkillRequiredInputs } from '@/app/utils/skillUtils';
 import PlayerSelectDialog from '@/app/components/game/PlayerSelectDialog';
 import CardSelectDialog from '@/app/components/game/CardSelectDialog';
 import { Card } from '@/app/utils/gameLogic';
+import GameModal, { GameModalHeader, GameModalTitle, GameModalDescription, GameModalFooter } from './GameModal';
 
 interface SkillDialogProps {
   open: boolean;
@@ -150,22 +143,22 @@ export default function SkillDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle className="text-2xl">{skillInfo.name} 스킬 사용</DialogTitle>
-          <DialogDescription className="text-base mt-2">
+    <>
+      <GameModal open={open} onClose={() => onOpenChange(false)} width={560}>
+        <GameModalHeader>
+          <GameModalTitle className="text-[28px]">{skillInfo.name} 스킬 사용</GameModalTitle>
+          <GameModalDescription className="text-[18px]">
             {skillInfo.description}
-          </DialogDescription>
-        </DialogHeader>
+          </GameModalDescription>
+        </GameModalHeader>
 
-        <div className="py-4 space-y-3">
+        <div className="space-y-3">
           {/* 스킬 정보 */}
-          <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600 dark:text-gray-400">쿨타임:</span>
-                <span className="font-bold">
+          <div className="bg-amber-100/80 dark:bg-amber-900/50 rounded-lg p-5 border border-amber-300 dark:border-amber-700">
+            <div className="space-y-3">
+              <div className="flex justify-between text-[16px]">
+                <span className="text-amber-700 dark:text-amber-300">쿨타임:</span>
+                <span className="font-bold text-amber-900 dark:text-amber-100">
                   {skillInfo.cooldown > 0
                     ? `${skillInfo.cooldown}턴`
                     : skillInfo.maxUses
@@ -174,17 +167,17 @@ export default function SkillDialog({
                 </span>
               </div>
               {skillInfo.cooldown > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">현재 진행도:</span>
-                  <span className="font-bold">
+                <div className="flex justify-between text-[16px]">
+                  <span className="text-amber-700 dark:text-amber-300">현재 진행도:</span>
+                  <span className="font-bold text-amber-900 dark:text-amber-100">
                     {skillProgress}/{skillMaxCooldown}
                   </span>
                 </div>
               )}
               {skillInfo.cooldown === 0 && skillInfo.maxUses && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600 dark:text-gray-400">남은 사용 횟수:</span>
-                  <span className="font-bold">{skillUsesLeft}회</span>
+                <div className="flex justify-between text-[16px]">
+                  <span className="text-amber-700 dark:text-amber-300">남은 사용 횟수:</span>
+                  <span className="font-bold text-amber-900 dark:text-amber-100">{skillUsesLeft}회</span>
                 </div>
               )}
             </div>
@@ -192,11 +185,11 @@ export default function SkillDialog({
 
           {/* 탱커 스킬 경고 */}
           {isTankSkillBlocked && (
-            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-300 dark:border-yellow-700">
-              <p className="text-sm text-yellow-700 dark:text-yellow-300 font-bold">
+            <div className="p-4 bg-red-100/80 dark:bg-red-900/30 rounded-lg border border-red-400 dark:border-red-700">
+              <p className="text-[16px] text-red-700 dark:text-red-300 font-bold">
                 ⚠ 탱커 스킬은 공격 스택이 있을 때만 사용할 수 있습니다.
               </p>
-              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+              <p className="text-[14px] text-red-600 dark:text-red-400 mt-1">
                 현재 공격 스택: {attackStack}
               </p>
             </div>
@@ -204,31 +197,32 @@ export default function SkillDialog({
 
           {/* 선택된 입력 표시 */}
           {requiredInputs.needsCard && selectedCardId && (
-            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-              <p className="text-sm text-green-700 dark:text-green-300">
+            <div className="p-4 bg-green-100/80 dark:bg-green-900/30 rounded-lg border border-green-400">
+              <p className="text-[16px] text-green-700 dark:text-green-300">
                 ✓ 카드를 선택했습니다.
               </p>
             </div>
           )}
           {requiredInputs.needsTarget && selectedPlayerIds.length > 0 && (
-            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-              <p className="text-sm text-green-700 dark:text-green-300">
+            <div className="p-4 bg-green-100/80 dark:bg-green-900/30 rounded-lg border border-green-400">
+              <p className="text-[16px] text-green-700 dark:text-green-300">
                 ✓ {selectedPlayerIds.length}명의 플레이어를 선택했습니다.
               </p>
             </div>
           )}
         </div>
 
-        <DialogFooter>
+        <GameModalFooter>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
+            className="px-8 py-3 text-[16px] border-amber-400 text-amber-800 hover:bg-amber-200"
           >
             취소
           </Button>
           <Button
             onClick={characterId === 'merchant' ? handleMerchantFlow : handleConfirm}
-            className="bg-purple-600 hover:bg-purple-500"
+            className="px-8 py-3 text-[16px] bg-purple-600 hover:bg-purple-500 text-white"
             disabled={isButtonDisabled}
           >
             {isTankSkillBlocked
@@ -239,8 +233,8 @@ export default function SkillDialog({
               ? `플레이어 선택 (${selectedPlayerIds.length}/${requiredInputs.targetCount})`
               : '스킬 사용'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </GameModalFooter>
+      </GameModal>
 
       {/* 플레이어 선택 다이얼로그 */}
       <PlayerSelectDialog
@@ -260,6 +254,6 @@ export default function SkillDialog({
         cards={myHand}
         onConfirm={handleCardSelectConfirm}
       />
-    </Dialog>
+    </>
   );
 }

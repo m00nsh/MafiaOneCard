@@ -1,5 +1,5 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/app/components/ui/dialog';
 import { CardSuit } from '@mafia/shared';
+import GameModal, { GameModalHeader, GameModalTitle, GameModalDescription } from './GameModal';
 
 interface SuitSelectDialogProps {
   open: boolean;
@@ -12,45 +12,44 @@ interface SuitSelectDialogProps {
  */
 export default function SuitSelectDialog({ open, onOpenChange, onSelect }: SuitSelectDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>문양 선택</DialogTitle>
-          <DialogDescription>
-            7 카드를 사용했습니다. 변경할 문양을 선택하세요.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid grid-cols-2 gap-4 py-4">
-          <button
-            onClick={() => onSelect('SPADE')}
-            className="flex flex-col items-center gap-2 p-4 border-2 border-gray-300 rounded-lg hover:border-gray-500 hover:bg-gray-100 transition-all"
-          >
-            <div className="text-4xl">♠</div>
-            <span className="text-sm font-semibold">스페이드</span>
-          </button>
-          <button
-            onClick={() => onSelect('HEART')}
-            className="flex flex-col items-center gap-2 p-4 border-2 border-gray-300 rounded-lg hover:border-gray-500 hover:bg-gray-100 transition-all"
-          >
-            <div className="text-4xl text-red-600">♥</div>
-            <span className="text-sm font-semibold">하트</span>
-          </button>
-          <button
-            onClick={() => onSelect('DIAMOND')}
-            className="flex flex-col items-center gap-2 p-4 border-2 border-gray-300 rounded-lg hover:border-gray-500 hover:bg-gray-100 transition-all"
-          >
-            <div className="text-4xl text-red-600">♦</div>
-            <span className="text-sm font-semibold">다이아몬드</span>
-          </button>
-          <button
-            onClick={() => onSelect('CLUB')}
-            className="flex flex-col items-center gap-2 p-4 border-2 border-gray-300 rounded-lg hover:border-gray-500 hover:bg-gray-100 transition-all"
-          >
-            <div className="text-4xl">♣</div>
-            <span className="text-sm font-semibold">클럽</span>
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <GameModal open={open} onClose={() => onOpenChange(false)} width={480}>
+      <GameModalHeader>
+        <GameModalTitle className="text-[26px]">문양 선택</GameModalTitle>
+        <GameModalDescription className="text-[16px]">
+          7 카드를 사용했습니다. 변경할 문양을 선택하세요.
+        </GameModalDescription>
+      </GameModalHeader>
+      
+      <div className="grid grid-cols-2 gap-5 py-4">
+        <button
+          onClick={() => onSelect('SPADE')}
+          className="flex flex-col items-center gap-3 p-5 border-2 border-amber-300 rounded-lg hover:border-purple-500 hover:bg-purple-100/50 transition-all bg-amber-100/50"
+        >
+          <div className="text-[48px]">♠</div>
+          <span className="text-[16px] font-semibold text-amber-900">스페이드</span>
+        </button>
+        <button
+          onClick={() => onSelect('HEART')}
+          className="flex flex-col items-center gap-3 p-5 border-2 border-amber-300 rounded-lg hover:border-purple-500 hover:bg-purple-100/50 transition-all bg-amber-100/50"
+        >
+          <div className="text-[48px] text-red-600">♥</div>
+          <span className="text-[16px] font-semibold text-amber-900">하트</span>
+        </button>
+        <button
+          onClick={() => onSelect('DIAMOND')}
+          className="flex flex-col items-center gap-3 p-5 border-2 border-amber-300 rounded-lg hover:border-purple-500 hover:bg-purple-100/50 transition-all bg-amber-100/50"
+        >
+          <div className="text-[48px] text-red-600">♦</div>
+          <span className="text-[16px] font-semibold text-amber-900">다이아몬드</span>
+        </button>
+        <button
+          onClick={() => onSelect('CLUB')}
+          className="flex flex-col items-center gap-3 p-5 border-2 border-amber-300 rounded-lg hover:border-purple-500 hover:bg-purple-100/50 transition-all bg-amber-100/50"
+        >
+          <div className="text-[48px]">♣</div>
+          <span className="text-[16px] font-semibold text-amber-900">클럽</span>
+        </button>
+      </div>
+    </GameModal>
   );
 }
