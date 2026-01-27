@@ -30,8 +30,8 @@ const getSortComparator = (mode: 'suit' | 'rank') => (a: Card, b: Card) => {
  * 카드 정렬 기능을 제공하는 커스텀 훅
  */
 export function useCardSorting(myHand: Card[]) {
-  const [sortMode, setSortMode] = useState<'none' | 'suit' | 'rank'>('none');
-  const [sortedHand, setSortedHand] = useState<Card[]>(myHand);
+  const [sortMode, setSortMode] = useState<'none' | 'suit' | 'rank'>('suit');
+  const [sortedHand, setSortedHand] = useState<Card[]>(() => [...myHand].sort(getSortComparator('suit')));
   const prevHandRef = useRef<Card[]>(myHand);
 
   // 서버 상태가 변경되면 정렬된 핸드도 업데이트
@@ -43,10 +43,17 @@ export function useCardSorting(myHand: Card[]) {
       );
 
     if (hasChanged) {
-      setSortedHand([...myHand]);
+      // 기본 정렬 모드가 'suit'이므로 정렬 적용
+      if (sortMode === 'suit') {
+        setSortedHand([...myHand].sort(getSortComparator('suit')));
+      } else if (sortMode === 'rank') {
+        setSortedHand([...myHand].sort(getSortComparator('rank')));
+      } else {
+        setSortedHand([...myHand]);
+      }
       prevHandRef.current = myHand;
     }
-  }, [myHand]);
+  }, [myHand, sortMode]);
 
   const sortHand = (mode: 'suit' | 'rank') => {
     setSortedHand(prev => [...prev].sort(getSortComparator(mode)));
