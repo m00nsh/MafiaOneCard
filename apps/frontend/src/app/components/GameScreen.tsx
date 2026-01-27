@@ -284,7 +284,12 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
     <LandscapeLayout>
       <LoadingOverlay isLoading={status === 'connecting'} loadingDots={loadingDots} />
       
-      <div className="size-full relative p-4 sm:p-8 flex flex-col justify-between">
+      <div 
+        className="size-full relative p-4 sm:p-8 flex flex-col justify-between bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: 'url(/Game_background.png)',
+        }}
+      >
         <ConnectionStatusIndicator status={status} sessionId={sessionId} error={error} />
         <TurnDirectionIndicator direction={direction} />
 
