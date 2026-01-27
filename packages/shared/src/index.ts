@@ -268,7 +268,8 @@ export interface ReadyMessage {
 
 export interface UseSkillMessage {
     skillId: CharacterId;
-    targetPlayerId?: string; // 대상 플레이어 (필요한 스킬의 경우)
+    targetPlayerId?: string; // 단일 타겟 (하위 호환성 유지)
+    targetPlayerIds?: string[]; // 다중 타겟 (광전사 등)
     selectedCardId?: string; // 선택한 카드 (잡상인 스킬의 경우)
     selectedSuit?: CardSuit; // 선택한 문양 (필요한 경우)
 }
