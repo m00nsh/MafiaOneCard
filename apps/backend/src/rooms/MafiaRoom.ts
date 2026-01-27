@@ -205,14 +205,21 @@ export class MafiaRoom extends Room<GameStateSchema> {
         const currentCount = this.state.players.size;
         console.log(`Lobby Step 1 (5s). Players: ${currentCount}`);
 
-        // Condition A: >= 3 Players -> Start immediately
+        // Condition A: Max players (5) reached -> Start immediately
+        if (currentCount >= GAME_CONSTANTS.MAX_PLAYERS) {
+            this.broadcast("announcement", `Max players (${GAME_CONSTANTS.MAX_PLAYERS}) gathered. Starting game!`);
+            this.startGame();
+            return;
+        }
+
+        // Condition B: >= 3 Players -> Start immediately
         if (currentCount >= 3) {
             this.broadcast("announcement", "Min players (3) gathered. Starting game!");
             this.startGame();
             return;
         }
 
-        // Condition B: < 3 Players -> Wait 5s more
+        // Condition C: < 3 Players -> Wait 5s more
         this.broadcast("announcement", "Waiting for more players... (Extending 5s)");
         this.startTimer(5, () => this.checkLobbyTimerStep2());
     }
@@ -665,10 +672,22 @@ export class MafiaRoom extends Room<GameStateSchema> {
 
         this.state.players.set(client.sessionId, player);
 
-        // 빠른 게임 모드: 플레이어 접속 시마다 타이머 리셋
-        // 마지막 플레이어 접속 시점부터 5초 후 checkLobbyTimerStep1 호출
-        // 게임 시작은 타이머가 만료된 후에만 처리 (즉시 시작 방지)
+        // 빠른 게임 모드: 플레이어 접속 시마다 체크
         if (this.gameMode === 'quick' && this.state.status === "LOBBY") {
+            const currentCount = this.state.players.size;
+            
+            // 5명이 모이면 즉시 게임 시작 (타이머 대기 없음)
+            if (currentCount >= GAME_CONSTANTS.MAX_PLAYERS) {
+                console.log(`Max players (${GAME_CONSTANTS.MAX_PLAYERS}) reached. Starting game immediately!`);
+                // 기존 타이머 취소
+                this.clearTimer();
+                this.broadcast("announcement", `Max players (${GAME_CONSTANTS.MAX_PLAYERS}) gathered. Starting game!`);
+                this.startGame();
+                return;
+            }
+            
+            // 5명 미만이면 타이머 리셋
+            // 마지막 플레이어 접속 시점부터 5초 후 checkLobbyTimerStep1 호출
             console.log(`Player joined. Resetting lobby timer (5s from now)...`);
             this.startTimer(5, () => this.checkLobbyTimerStep1());
         }
