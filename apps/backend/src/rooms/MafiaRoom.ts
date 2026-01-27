@@ -36,6 +36,20 @@ export class MafiaRoom extends Room<GameStateSchema> {
 
         // Turn Listener for Cooldowns & Timer
         this.turnManager.onTurnChange = (playerId) => {
+            // 게임이 진행 중이 아니면 무시
+            if (this.state.status !== "PLAYING") {
+                console.log(`Turn change ignored - game not playing (status: ${this.state.status})`);
+                return;
+            }
+
+            // 플레이어가 1명 이하면 게임 종료
+            if (this.state.players.size <= 1) {
+                console.log(`Only 1 player left, ending game`);
+                this.state.status = "ENDED";
+                this.handleGameEnd(playerId);
+                return;
+            }
+
             this.skillManager.onTurnStart(playerId);
 
             // Turn Timer (10s)
@@ -76,12 +90,31 @@ export class MafiaRoom extends Room<GameStateSchema> {
     }
 
     private handleTurnTimeout(playerId: string) {
+        // 게임이 진행 중이 아니면 무시
+        if (this.state.status !== "PLAYING") {
+            console.log(`Turn timeout ignored - game not playing (status: ${this.state.status})`);
+            return;
+        }
+
+        // 현재 턴이 아니면 무시 (이미 다른 액션이 처리됨)
+        if (this.state.currentTurn !== playerId) {
+            console.log(`Turn timeout ignored - not current turn (current: ${this.state.currentTurn}, timeout for: ${playerId})`);
+            return;
+        }
+
         console.log(`Turn timeout for ${playerId}`);
-        // Force Draw 1 Card & Next Turn
         const player = this.state.players.get(playerId);
         if (!player) return;
 
-        // Reuse Draw Logic (Simplified)
+        // 플레이어가 1명만 남았으면 게임 종료
+        if (this.state.players.size <= 1) {
+            console.log(`Only 1 player left, ending game`);
+            this.state.status = "ENDED";
+            this.handleGameEnd(playerId);
+            return;
+        }
+
+        // Force Draw 1 Card & Next Turn
         if (this.deck.count === 0) this.deck.replenish();
         const card = this.deck.draw();
         if (card) player.hand.push(new CardSchema(card.id, card.suit, card.rank));

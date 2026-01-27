@@ -145,9 +145,29 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
 
     onMessage<GameEndMessage>('game_end', (message) => {
       console.log('[GameScreen] 게임 종료:', message);
-      const currentMyId = sessionId || 'me';
-      const myStats = message.stats[currentMyId];
-      const myRank = myStats?.rank || 0;
+      console.log('[GameScreen] 내 sessionId:', sessionId, 'stats:', message.stats);
+      
+      let myRank = 0;
+      
+      // 형식 1: 탈락 시 - stats: { rank, handCount }
+      if (typeof message.stats.rank === 'number') {
+        myRank = message.stats.rank;
+      } 
+      // 형식 2: 게임 종료 시 - stats: { [sessionId]: { rank, handCount } }
+      else if (sessionId && message.stats[sessionId]) {
+        myRank = message.stats[sessionId].rank;
+      }
+      // Fallback: stats 객체에서 첫 번째 플레이어의 rank 사용 (디버깅용)
+      else {
+        const firstKey = Object.keys(message.stats).find(key => 
+          typeof message.stats[key] === 'object' && message.stats[key]?.rank
+        );
+        if (firstKey) {
+          console.warn('[GameScreen] sessionId로 찾지 못함, 첫 번째 키 사용:', firstKey);
+          myRank = message.stats[firstKey].rank;
+        }
+      }
+      
       setGameEndData({
         myRank,
         winnerId: message.winnerId,
