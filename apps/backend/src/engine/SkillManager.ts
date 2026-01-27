@@ -1,4 +1,4 @@
-import { GameStateSchema, PlayerSchema, CharacterId, GAME_CONSTANTS, CardSuit, ErrorCode, CharacterSkill } from "@mafia/shared";
+import { GameStateSchema, PlayerSchema, CharacterId, GAME_CONSTANTS, CardSuit, ErrorCode, CharacterSkill, CardSchema } from "@mafia/shared";
 import { Deck } from "../entities/Deck";
 import { TurnManager } from "./TurnManager";
 import { OneCardEngine } from "./OneCardEngine";
@@ -108,7 +108,10 @@ export class SkillManager {
                     for (let i = 0; i < this.state.attackStack; i++) {
                         if (deck.count === 0) deck.replenish();
                         const card = deck.draw();
-                        if (card) player.hand.push(card as any);
+                        if (card) {
+                            const cardSchema = new CardSchema(card.id, card.suit, card.rank);
+                            player.hand.push(cardSchema);
+                        }
                     }
                     this.state.attackStack = 0; // 데미지 받음 -> 스택 초기화
                     result.message = "Blocked 2 damage and took remainder.";
@@ -194,7 +197,10 @@ export class SkillManager {
                 for (let i = 0; i < 3; i++) {
                     if (this.deck.count === 0) this.deck.replenish();
                     const c = this.deck.draw();
-                    if (c) targetA.hand.push(c as any);
+                    if (c) {
+                        const cardSchema = new CardSchema(c.id, c.suit, c.rank);
+                        targetA.hand.push(cardSchema);
+                    }
                 }
                 affectedPlayers.add(targetId);
                 result.message = "Assassinated target with 3 cards.";
@@ -209,7 +215,10 @@ export class SkillManager {
                 // -> Simplified: Self draw 1. (MVP)
                 if (this.deck.count === 0) this.deck.replenish();
                 const c = this.deck.draw();
-                if (c) player.hand.push(c as any);
+                if (c) {
+                    const cardSchema = new CardSchema(c.id, c.suit, c.rank);
+                    player.hand.push(cardSchema);
+                }
 
                 // Target logic placeholder (needs protocol update for multiple targets)
                 if (targetId) {
@@ -218,7 +227,10 @@ export class SkillManager {
                         for (let i = 0; i < 3; i++) {
                             if (this.deck.count === 0) this.deck.replenish();
                             const c2 = this.deck.draw();
-                            if (c2) t.hand.push(c2 as any);
+                            if (c2) {
+                                const cardSchema2 = new CardSchema(c2.id, c2.suit, c2.rank);
+                                t.hand.push(cardSchema2);
+                            }
                         }
                         affectedPlayers.add(targetId);
                     }

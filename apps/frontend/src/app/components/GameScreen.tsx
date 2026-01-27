@@ -21,6 +21,8 @@ import CenterArea from '@/app/components/game/CenterArea';
 import BottomArea from '@/app/components/game/BottomArea';
 import GameEndDialog from '@/app/components/game/GameEndDialog';
 import SuitSelectDialog from '@/app/components/game/SuitSelectDialog';
+import SkillDialog from '@/app/components/game/SkillDialog';
+import { UseSkillMessage } from '@mafia/shared';
 
 interface GameScreenProps {
   playerCount: number;
@@ -37,8 +39,12 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
 
   // 컴포넌트 마운트 시 자동 연결
   useEffect(() => {
-    connect({ name: nickname || `Player-${Math.random().toString(36).substr(2, 9)}` });
-  }, [nickname, connect]);
+    const characterId = selectedCharacters[0] as CharacterId | undefined;
+    connect({ 
+      name: nickname || `Player-${Math.random().toString(36).substr(2, 9)}`,
+      characterId: characterId,
+    });
+  }, [nickname, connect, selectedCharacters]);
 
   // 연결 상태 변경 알림
   useEffect(() => {
@@ -149,7 +155,24 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
       });
       setShowStatsDialog(true);
     });
-  }, [onMessage, sessionId]);
+
+    // 스킬 사용 알림 (토스트 제거, 콘솔 로그만)
+    onMessage<{ playerId: string; skillId: string; targetPlayerId?: string }>('skill_used', (message) => {
+      if (DEBUG) {
+        const playerName = gameState?.players.get(message.playerId)?.nickname || '플레이어';
+        const skillName = CHARACTER_SKILLS[message.skillId as CharacterId]?.name || '스킬';
+        console.log(`[GameScreen] ${playerName}이(가) ${skillName}을(를) 사용했습니다.`);
+      }
+    });
+
+    // 공지사항 알림 (토스트 제거, 콘솔 로그만)
+    onMessage<{ message: string; type?: 'info' | 'warning' | 'error' | 'success' }>('announcement', (announcement) => {
+      if (DEBUG) {
+        const message = typeof announcement === 'string' ? announcement : announcement.message;
+        console.log('[GameScreen] 공지사항:', message);
+      }
+    });
+  }, [onMessage, sessionId, gameState?.players]);
   
   const handleToggleReady = () => {
     if (!isLobby) return;
@@ -158,6 +181,20 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
     if (DEBUG) {
       console.log('[GameScreen] 준비 상태 변경:', newReadyState);
     }
+  };
+
+  // 스킬 사용 핸들러
+  const handleSkillClick = () => {
+    if (!isMyTurn || !isPlaying) return;
+    setShowSkillDialog(true);
+  };
+
+  const handleSkillConfirm = (message: UseSkillMessage) => {
+    sendMessage('use_skill', message);
+    if (DEBUG) {
+      console.log('[GameScreen] 스킬 사용:', message);
+    }
+    setShowSkillDialog(false);
   };
 
   const myCharacterName = useMemo(() => {
@@ -173,12 +210,17 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   }, [gameState?.players, myId, initialPlayerCount]);
 
   // State
-  const maxSkillCooldown = 3;
-  const [currentSkillCharge, setCurrentSkillCharge] = useState(1);
   const [showSuitDialog, setShowSuitDialog] = useState(false);
   const [pendingCard, setPendingCard] = useState<{ card: Card; index: number } | null>(null);
   const [showStatsDialog, setShowStatsDialog] = useState(false);
   const [gameEndData, setGameEndData] = useState<{ myRank: number; winnerId: string; reason: string } | null>(null);
+  const [showSkillDialog, setShowSkillDialog] = useState(false);
+
+  // 스킬 관련 정보 (서버에서 가져옴)
+  const myCharacterId = gameState?.myPlayer?.characterId || (selectedCharacters[0] as CharacterId) || null;
+  const skillProgress = gameState?.myPlayer?.skillProgress || 0;
+  const skillMaxCooldown = gameState?.myPlayer?.skillMaxCooldown || 0;
+  const skillUsesLeft = gameState?.myPlayer?.skillUsesLeft || 0;
 
   // 카드 내기
   const handlePlayCard = (index: number) => {
@@ -233,19 +275,10 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   };
 
   // 카드 playability 체크 함수
-  const checkCardPlayability = (card: Card, index: number): boolean => {
+  const checkCardPlayability = (card: Card, _index: number): boolean => {
     return isCardPlayable(card, topCard, attackStack, selectedSuit, isMyTurn, isPlaying);
   };
 
-  const handleSkillClick = () => {
-    const isSkillReady = isMyTurn && currentSkillCharge >= maxSkillCooldown;
-    if (isSkillReady) {
-      console.log("Skill Used!");
-      setCurrentSkillCharge(0);
-    } else {
-      setCurrentSkillCharge(prev => Math.min(maxSkillCooldown, prev + 1));
-    }
-  };
 
   return (
     <LandscapeLayout>
@@ -285,9 +318,12 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
           onToggleSort={handleToggleSort}
           onPlayCard={handlePlayCard}
           isCardPlayable={checkCardPlayability}
-          maxSkillCooldown={maxSkillCooldown}
-          currentSkillCharge={currentSkillCharge}
+          characterId={myCharacterId}
+          skillProgress={skillProgress}
+          skillMaxCooldown={skillMaxCooldown}
+          skillUsesLeft={skillUsesLeft}
           isMyTurn={isMyTurn}
+          isPlaying={isPlaying}
           onSkillClick={handleSkillClick}
         />
       </div>
@@ -309,6 +345,22 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
         open={showSuitDialog}
         onOpenChange={setShowSuitDialog}
         onSelect={handleSuitSelect}
+      />
+
+      {/* 스킬 사용 다이얼로그 */}
+      <SkillDialog
+        open={showSkillDialog}
+        onOpenChange={setShowSkillDialog}
+        characterId={myCharacterId}
+        skillProgress={skillProgress}
+        skillMaxCooldown={skillMaxCooldown}
+        skillUsesLeft={skillUsesLeft}
+        players={gameState?.players || new Map()}
+        myId={myId}
+        myHand={myHand}
+        playerCount={currentPlayerCount}
+        attackStack={attackStack}
+        onConfirm={handleSkillConfirm}
       />
     </LandscapeLayout>
   );

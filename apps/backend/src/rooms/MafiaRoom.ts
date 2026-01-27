@@ -295,6 +295,10 @@ export class MafiaRoom extends Room<GameStateSchema> {
         console.log(`${client.sessionId} joined.`);
         const player = new PlayerSchema();
         if (options?.name) player.nickname = options.name;
+        if (options?.characterId) {
+            player.characterId = options.characterId;
+            console.log(`${client.sessionId} selected character: ${options.characterId}`);
+        }
         if (this.state.players.size === 0) player.isHost = true;
         this.state.players.set(client.sessionId, player);
     }

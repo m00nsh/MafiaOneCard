@@ -1,5 +1,7 @@
 import PlayingCard from '@/app/components/PlayingCard';
 import { Card } from '@/app/utils/gameLogic';
+import { CharacterId } from '@mafia/shared';
+import SkillButton from '@/app/components/game/SkillButton';
 
 interface BottomAreaProps {
   nickname: string;
@@ -10,9 +12,12 @@ interface BottomAreaProps {
   onToggleSort: () => void;
   onPlayCard: (index: number) => void;
   isCardPlayable: (card: Card, index: number) => boolean;
-  maxSkillCooldown: number;
-  currentSkillCharge: number;
+  characterId: CharacterId | null;
+  skillProgress: number;
+  skillMaxCooldown: number;
+  skillUsesLeft: number;
   isMyTurn: boolean;
+  isPlaying: boolean;
   onSkillClick: () => void;
 }
 
@@ -28,9 +33,12 @@ export default function BottomArea({
   onToggleSort,
   onPlayCard,
   isCardPlayable,
-  maxSkillCooldown,
-  currentSkillCharge,
+  characterId,
+  skillProgress,
+  skillMaxCooldown,
+  skillUsesLeft,
   isMyTurn,
+  isPlaying,
   onSkillClick,
 }: BottomAreaProps) {
   // Dynamic Hand Spacing Logic
@@ -52,7 +60,6 @@ export default function BottomArea({
   };
 
   const overlapPx = calculateOverlap();
-  const isSkillReady = isMyTurn && currentSkillCharge >= maxSkillCooldown;
 
   return (
     <div className="w-full flex items-end justify-between gap-4 mt-auto mb-2 relative">
@@ -100,32 +107,15 @@ export default function BottomArea({
       </div>
 
       {/* Skill Button (Right) */}
-      <div className="flex flex-col gap-2 items-end min-w-[120px] shrink-0">
-        <button
-          onClick={onSkillClick}
-          className={`px-6 py-8 rounded-xl text-xl font-bold shadow-lg transition-all w-full whitespace-nowrap
-            ${isSkillReady
-              ? 'bg-purple-600 hover:bg-purple-500 text-white hover:scale-105 cursor-pointer'
-              : 'bg-gray-600/50 text-gray-400 cursor-not-allowed grayscale'
-            }
-          `}
-        >
-          능력 사용하기
-        </button>
-        <div className="bg-black/40 rounded-lg h-6 w-full overflow-hidden border border-white/30 flex">
-          {Array.from({ length: maxSkillCooldown }).map((_, i) => {
-            const isFilled = i < currentSkillCharge;
-            return (
-              <div
-                key={i}
-                className={`flex-1 ${isFilled ? 'bg-blue-500' : 'bg-transparent'} ${
-                  i < maxSkillCooldown - 1 ? 'border-r border-white/30 border-dotted' : ''
-                }`}
-              />
-            );
-          })}
-        </div>
-      </div>
+      <SkillButton
+        characterId={characterId}
+        skillProgress={skillProgress}
+        skillMaxCooldown={skillMaxCooldown}
+        skillUsesLeft={skillUsesLeft}
+        isMyTurn={isMyTurn}
+        isPlaying={isPlaying}
+        onSkillClick={onSkillClick}
+      />
     </div>
   );
 }

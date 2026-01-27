@@ -20,7 +20,7 @@ export interface UseColyseusRoomReturn {
   error: Error | null;
 
   // 연결/해제 함수
-  connect: (options?: { name?: string }) => Promise<void>;
+  connect: (options?: { name?: string; characterId?: CharacterId }) => Promise<void>;
   disconnect: () => void;
 
   // 게임 상태 (변환된 형태)
@@ -90,7 +90,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
   }, []);
 
   // 방 연결
-  const connect = useCallback(async (options?: { name?: string }) => {
+  const connect = useCallback(async (options?: { name?: string; characterId?: CharacterId }) => {
     if (!clientRef.current) {
       const error = new Error('Colyseus 클라이언트가 초기화되지 않았습니다.');
       setError(error);
@@ -151,8 +151,10 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
             isReady: myPlayerData.isReady,
             isHost: myPlayerData.isHost,
             handCount: myHand.length,
-            skillCooldown: myPlayerData.skillCooldown,
-            skillUsesLeft: myPlayerData.skillUsesLeft,
+            skillCooldown: myPlayerData.skillProgress || 0, // skillProgress를 skillCooldown으로 매핑 (호환성)
+            skillUsesLeft: myPlayerData.skillUsesLeft || 0,
+            skillProgress: myPlayerData.skillProgress || 0,
+            skillMaxCooldown: myPlayerData.skillMaxCooldown || 0,
           };
         }
 
@@ -177,8 +179,10 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
               isReady: playerData.isReady,
               isHost: playerData.isHost,
               handCount,
-              skillCooldown: playerData.skillCooldown,
-              skillUsesLeft: playerData.skillUsesLeft,
+              skillCooldown: playerData.skillProgress || 0, // skillProgress를 skillCooldown으로 매핑 (호환성)
+              skillUsesLeft: playerData.skillUsesLeft || 0,
+              skillProgress: playerData.skillProgress || 0,
+              skillMaxCooldown: playerData.skillMaxCooldown || 0,
             });
           }
         });
