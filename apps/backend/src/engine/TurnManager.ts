@@ -1,6 +1,9 @@
 import { GameStateSchema } from "@mafia/shared";
 
 export class TurnManager {
+    // Callback for external listeners (e.g., SkillManager cooldowns)
+    public onTurnChange?: (playerId: string) => void;
+
     constructor(private state: GameStateSchema) { }
 
     // 다음 턴으로 진행
@@ -9,7 +12,9 @@ export class TurnManager {
         if (playerIds.length === 0) return;
 
         const currentIndex = playerIds.indexOf(this.state.currentTurn);
-        if (currentIndex === -1) return; // 현재 턴이 유효하지 않으면 중단 (혹은 첫 턴 설정 필요)
+        if (currentIndex === -1 && this.state.currentTurn !== "") {
+            // currentTurn invalid or empty, maybe verify logic
+        }
 
         let nextIndex: number;
 
@@ -31,6 +36,11 @@ export class TurnManager {
 
         this.state.currentTurn = playerIds[nextIndex];
         console.log(`Turn changed: ${this.state.currentTurn} (Direction: ${this.state.direction})`);
+
+        // Notify listener
+        if (this.onTurnChange) {
+            this.onTurnChange(this.state.currentTurn);
+        }
     }
 
     // 방향 반전

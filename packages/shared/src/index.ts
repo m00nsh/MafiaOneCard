@@ -124,7 +124,7 @@ export const CHARACTER_SKILLS: Record<CharacterId, CharacterSkill> = {
         name: '소환사',
         description: '다른 플레이어의 스킬을 뺏어서 사용',
         cooldown: 0,
-        maxUses: 1,
+        maxUses: 2,
     },
     assassin: {
         id: 'assassin',
@@ -182,6 +182,7 @@ export interface GameState {
     winnerId: string | null; // 승리한 플레이어 ID
 }
 
+
 // ============================================================================
 // Schema v3: Colyseus 동기화용 클래스
 // ============================================================================
@@ -191,23 +192,27 @@ export class PlayerSchema extends Schema {
     @type([CardSchema]) hand = new ArraySchema<CardSchema>();
     @type("boolean") isReady: boolean = false;
     @type("string") nickname: string = "";
-    @type("string") characterId: string = ""; // CharacterId | null을 string으로 저장
+    @type("string") characterId: string = "";
     @type("boolean") isHost: boolean = false;
-    @type("number") skillCooldown: number = 0;
     @type("number") skillUsesLeft: number = 0;
+
+    // New fields for Cooldown System
+    @type("number") skillProgress: number = 0; // 0 to Max
+    @type("number") skillMaxCooldown: number = 0; // Max charge required
+    @type(["string"]) activeEffects = new ArraySchema<string>(); // e.g., "shaman_cursed"
 }
 
 // Schema v3: GameState 클래스 (게임 전체 상태)
 export class GameStateSchema extends Schema {
-    @type("string") status: string = "LOBBY"; // RoomStatus
+    @type("string") status: string = "LOBBY";
     @type({ map: PlayerSchema }) players = new MapSchema<PlayerSchema>();
-    @type("string") currentTurn: string = ""; // 현재 턴인 플레이어의 sessionId
-    @type("string") direction: string = "clockwise"; // GameDirection
-    @type("number") attackStack: number = 0; // 누적된 공격 카드 수
-    @type(CardSchema) topCard: CardSchema = new CardSchema("", "SPADE", "A"); // 현재 바닥에 놓인 카드 (빈 카드로 초기화)
-    @type("string") selectedSuit: string = ""; // CardSuit | null을 string으로 저장
-    @type("number") deckCount: number = 0; // 남은 덱 카드 수
-    @type("string") winnerId: string = ""; // 승리한 플레이어 ID
+    @type("string") currentTurn: string = "";
+    @type("string") direction: string = "clockwise";
+    @type("number") attackStack: number = 0;
+    @type(CardSchema) topCard: CardSchema = new CardSchema("", "SPADE", "A");
+    @type("string") selectedSuit: string = "";
+    @type("number") deckCount: number = 0;
+    @type("string") winnerId: string = "";
 }
 
 // ============================================================================
