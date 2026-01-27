@@ -47,7 +47,7 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
     }
 
     const characterId = selectedCharacters[0] as CharacterId | undefined;
-    connect({ 
+    connect({
       name: nickname || `Player-${Math.random().toString(36).substr(2, 9)}`,
       characterId: characterId,
     });
@@ -89,7 +89,7 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   }, [isPlaying, gameState?.myHand, MOCK_HAND]);
 
   const selectedSuit = gameState?.selectedSuit || null;
-  
+
   const originalTopCard = useMemo(() => {
     if (isPlaying && gameState?.topCard) {
       return gameState.topCard;
@@ -107,7 +107,7 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
     }
     return originalTopCard;
   }, [originalTopCard, selectedSuit]);
-  
+
   const deckCount = gameState?.deckCount ?? 25;
   const attackStack = gameState?.attackStack ?? 0;
   const direction = gameState?.direction || 'clockwise';
@@ -116,8 +116,8 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   const myReadyState = gameState?.myPlayer?.isReady || false;
   const winnerId = gameState?.winnerId || null;
   void winnerId;
-  
-  const allPlayersReady = gameState?.players 
+
+  const allPlayersReady = gameState?.players
     ? Array.from(gameState.players.values()).every(p => p.isReady)
     : false;
   const currentPlayerCount = gameState?.players?.size || 0;
@@ -135,14 +135,14 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   // 예언자 스킬: 확인한 카드 표시
   const [prophetCards, setProphetCards] = useState<Card[] | null>(null);
   const [prophetTargetName, setProphetTargetName] = useState<string>('');
-  
+
   // 게임 종료 등수가 이미 설정되었는지 추적 (파산 시 한 번 설정되면 변경되지 않아야 함)
   const gameEndReceivedRef = useRef(false);
 
   // 서버 응답 메시지 리스너
   useEffect(() => {
     if (!onMessage) return;
-    
+
     onMessage<CardPlayResponseMessage>('card_play_response', (response) => {
       if (response.success) {
         if (DEBUG) {
@@ -152,7 +152,7 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
         console.error('[GameScreen] 카드 내기 실패:', response.error);
       }
     });
-    
+
     onMessage<DrawCardResponseMessage>('draw_card_response', (response) => {
       if (response.success) {
         if (DEBUG) {
@@ -166,26 +166,26 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
     onMessage<GameEndMessage>('game_end', (message) => {
       console.log('[GameScreen] 게임 종료:', message);
       console.log('[GameScreen] 내 sessionId:', sessionId, 'stats:', message.stats);
-      
+
       // 이미 게임 종료 정보를 받았으면 무시 (파산 후 브로드캐스트 메시지 무시)
       if (gameEndReceivedRef.current) {
         console.log('[GameScreen] 이미 게임 종료 정보를 받음, 무시');
         return;
       }
-      
+
       let myRank = 0;
-      
+
       // 형식 1: 탈락 시 - stats: { rank, handCount }
       if (typeof message.stats.rank === 'number') {
         myRank = message.stats.rank;
-      } 
+      }
       // 형식 2: 게임 종료 시 - stats: { [sessionId]: { rank, handCount } }
       else if (sessionId && message.stats[sessionId]) {
         myRank = message.stats[sessionId].rank;
       }
       // Fallback: stats 객체에서 첫 번째 플레이어의 rank 사용 (디버깅용)
       else {
-        const firstKey = Object.keys(message.stats).find(key => 
+        const firstKey = Object.keys(message.stats).find(key =>
           typeof message.stats[key] === 'object' && message.stats[key]?.rank
         );
         if (firstKey) {
@@ -193,10 +193,10 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
           myRank = message.stats[firstKey].rank;
         }
       }
-      
+
       // 등수가 설정되었으면 ref를 true로 설정
       gameEndReceivedRef.current = true;
-      
+
       setGameEndData({
         myRank,
         winnerId: message.winnerId,
@@ -220,7 +220,7 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
         const message = typeof announcement === 'string' ? announcement : announcement.message;
         console.log('[GameScreen] 공지사항:', message);
       }
-      
+
       // 타이머 만료 메시지 감지 시 팝업 닫기
       const messageText = typeof announcement === 'string' ? announcement : announcement.message;
       if (messageText && messageText.includes('timed out')) {
@@ -232,57 +232,70 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
     });
 
     // 예언자 스킬 결과 수신
-    onMessage<{ 
-      cards: Array<{ id: string; suit: string; rank: string }>; 
-      targetPlayerId?: string; 
+    onMessage<{
+      cards: Array<{ id: string; suit: string; rank: string }>;
+      targetPlayerId?: string;
       targetPlayerName?: string;
       totalCards?: number;
     }>('prophet_result', (message) => {
-      if (DEBUG) {
-        console.log('[GameScreen] 예언자 스킬 결과:', message);
-      }
-      
-      // 카드 정보를 UI 형식으로 변환
+      // ... existing code ...
+      // (omitted for brevity, keep existing prophet logic)
+      if (DEBUG) console.log('[GameScreen] 예언자 스킬 결과:', message);
+
       const uiCards: Card[] = message.cards.map(card => {
-        // 서버의 suit 형식 (SPADE, HEART, DIAMOND, CLUB, JOKER)을 UI 형식으로 변환
-        let suitUI: 'spades' | 'hearts' | 'diamonds' | 'clubs' | 'joker';
+        let suitUI: any = 'clubs';
         switch (card.suit) {
           case 'SPADE': suitUI = 'spades'; break;
           case 'HEART': suitUI = 'hearts'; break;
           case 'DIAMOND': suitUI = 'diamonds'; break;
           case 'CLUB': suitUI = 'clubs'; break;
           case 'JOKER': suitUI = 'joker'; break;
-          default: suitUI = 'clubs';
         }
-        
-        // 조커 카드 처리
-        let rankUI: Card['rank'] = card.rank as Card['rank'];
+        let rankUI: any = card.rank;
         if (card.suit === 'JOKER') {
-          if (card.rank === 'BLACK') {
-            rankUI = 'JOKER_BW';
-          } else if (card.rank === 'COLOR') {
-            rankUI = 'JOKER_COLOR';
-          }
+          if (card.rank === 'BLACK') rankUI = 'JOKER_BW';
+          else if (card.rank === 'COLOR') rankUI = 'JOKER_COLOR';
         }
-        
-        return {
-          id: card.id,
-          suit: suitUI,
-          rank: rankUI
-        };
+        return { id: card.id, suit: suitUI, rank: rankUI };
       });
-      
+
       setProphetCards(uiCards);
       setProphetTargetName(message.targetPlayerName || '플레이어');
-      
-      // 3초 후 자동으로 사라지기
       setTimeout(() => {
         setProphetCards(null);
         setProphetTargetName('');
       }, 3000);
     });
+
+    // 소환사 체크 결과 수신
+    onMessage<any>('summoner_check_result', (result) => {
+      if (summonCheckResolverRef.current) {
+        summonCheckResolverRef.current(result);
+        summonCheckResolverRef.current = null;
+      }
+    });
+
   }, [onMessage, sessionId, gameState?.players]);
-  
+
+  // 소환사 체크 resolver Ref
+  const summonCheckResolverRef = useRef<((result: any) => void) | null>(null);
+
+  const handleCheckSummon = (targetId: string): Promise<any> => {
+    return new Promise((resolve) => {
+      summonCheckResolverRef.current = resolve;
+      sendMessage('check_summon_target', { targetId });
+
+      // Timeout handling (optional but good)
+      setTimeout(() => {
+        if (summonCheckResolverRef.current === resolve) {
+          console.warn("Summon check timed out");
+          resolve({ success: false, error: "Timeout" });
+          summonCheckResolverRef.current = null;
+        }
+      }, 3000);
+    });
+  };
+
   const handleToggleReady = () => {
     if (!isLobby) return;
     const newReadyState = !myReadyState;
@@ -352,7 +365,7 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
     };
 
     sendMessage('card_play', message);
-    
+
     if (DEBUG) {
       console.log('[GameScreen] 카드 내기:', card.id, message);
     }
@@ -385,8 +398,8 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   return (
     <LandscapeLayout>
       <LoadingOverlay isLoading={status === 'connecting'} loadingDots={loadingDots} />
-      
-      <div 
+
+      <div
         className="size-full relative p-4 sm:p-8 flex flex-col justify-between bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage: 'url(/Game_background.png)',
@@ -415,8 +428,8 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
         <ConnectionStatusIndicator status={status} sessionId={sessionId} error={error} />
         <TurnDirectionIndicator direction={direction} />
         {isPlaying && (
-          <TurnTimer 
-            timerEndTime={gameState?.timerEndTime || 0} 
+          <TurnTimer
+            timerEndTime={gameState?.timerEndTime || 0}
             isMyTurn={isMyTurn}
           />
         )}
@@ -444,7 +457,7 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
 
         {/* 예언자 스킬: 확인한 카드 표시 (중앙 오른쪽 영역) */}
         {prophetCards && prophetCards.length > 0 && (
-          <div 
+          <div
             className="absolute top-1/2 right-[12%] -translate-y-1/2 z-40"
             style={{
               animation: 'fadeInScale 0.3s ease-out, fadeOut 0.3s ease-in 2.7s forwards'
@@ -530,6 +543,7 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
           playerCount={currentPlayerCount}
           attackStack={attackStack}
           onConfirm={handleSkillConfirm}
+          onCheckSummon={handleCheckSummon}
         />
       </div>
     </LandscapeLayout>
