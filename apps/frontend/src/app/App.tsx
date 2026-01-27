@@ -82,7 +82,8 @@ export default function App() {
             if (mode === 'custom') {
               navigateToScreen('room');
             } else {
-              navigateToScreen('playerCount');
+              // 빠른 게임: 바로 캐릭터 선택 화면으로
+              navigateToScreen('characterSelect');
             }
           }}
           onSetNickname={setNickname}
@@ -115,12 +116,26 @@ export default function App() {
 
       {gameState.screen === 'loading' && (
         <LoadingScreen
-          onComplete={() => navigateToScreen('characterSelect')}
+          onComplete={() => {
+            // 커스텀 게임 모드: 캐릭터 선택 화면으로
+            if (gameState.gameMode === 'custom') {
+              navigateToScreen('characterSelect');
+            }
+          }}
           onBack={() => {
             if (gameState.gameMode === 'custom') {
               navigateToScreen('room');
             } else {
-              navigateToScreen('playerCount');
+              navigateToScreen('characterSelect');
+            }
+          }}
+          gameMode={gameState.gameMode || undefined}
+          selectedCharacters={gameState.selectedCharacters}
+          nickname={gameState.nickname}
+          onGameStart={() => {
+            // 빠른 게임 모드: 게임 시작 시 게임 화면으로
+            if (gameState.gameMode === 'quick') {
+              navigateToScreen('game');
             }
           }}
         />
@@ -130,7 +145,20 @@ export default function App() {
         <CharacterSelectScreen
           onComplete={(characters) => {
             setSelectedCharacters(characters);
-            navigateToScreen('game');
+            // 빠른 게임: 캐릭터 선택 후 매칭 대기 화면으로
+            if (gameState.gameMode === 'quick') {
+              navigateToScreen('loading');
+            } else {
+              // 커스텀 게임: 바로 게임 화면으로
+              navigateToScreen('game');
+            }
+          }}
+          onBack={() => {
+            if (gameState.gameMode === 'quick') {
+              navigateToScreen('gameMode');
+            } else {
+              navigateToScreen('room');
+            }
           }}
         />
       )}

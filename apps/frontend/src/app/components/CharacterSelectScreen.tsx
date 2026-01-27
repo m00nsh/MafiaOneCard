@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
 
@@ -72,9 +72,10 @@ export const characters: Character[] = [
 
 interface CharacterSelectScreenProps {
   onComplete: (selectedCharacters: string[]) => void;
+  onBack?: () => void;
 }
 
-export default function CharacterSelectScreen({ onComplete }: CharacterSelectScreenProps) {
+export default function CharacterSelectScreen({ onComplete, onBack }: CharacterSelectScreenProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
 
@@ -111,6 +112,16 @@ export default function CharacterSelectScreen({ onComplete }: CharacterSelectScr
         <div className="absolute top-2 left-8 flex items-center gap-2">
           <span className="text-white text-xl sm:text-2xl font-bold">캐릭터 선택하기</span>
         </div>
+
+        {/* Back button */}
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="absolute top-2 left-2 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+          >
+            <ArrowLeft className="w-6 h-6 text-white" />
+          </button>
+        )}
 
         {/* Header - Center */}
         <div className="text-center mb-3">

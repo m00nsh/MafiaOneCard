@@ -20,7 +20,7 @@ export interface UseColyseusRoomReturn {
   error: Error | null;
 
   // 연결/해제 함수
-  connect: (options?: { name?: string; characterId?: CharacterId }) => Promise<void>;
+  connect: (options?: { name?: string; characterId?: CharacterId; mode?: 'quick' | 'custom' }) => Promise<void>;
   disconnect: () => void;
 
   // 게임 상태 (변환된 형태)
@@ -91,7 +91,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
   }, []);
 
   // 방 연결
-  const connect = useCallback(async (options?: { name?: string; characterId?: CharacterId }) => {
+  const connect = useCallback(async (options?: { name?: string; characterId?: CharacterId; mode?: 'quick' | 'custom' }) => {
     if (!clientRef.current) {
       const error = new Error('Colyseus 클라이언트가 초기화되지 않았습니다.');
       setError(error);
@@ -107,7 +107,31 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
         console.log('[Colyseus] 방 연결 시도:', ROOM_NAME, options);
       }
 
-      const newRoom = await clientRef.current.joinOrCreate<GameStateSchema>(ROOM_NAME, options || {});
+      // 빠른 게임 모드: LOBBY 상태인 빠른 게임 방을 찾아 조인, 없으면 새 방 생성
+      // 커스텀 게임 모드: 기존 방이 있으면 조인, 없으면 생성
+      let newRoom: Room<GameStateSchema>;
+      if (options?.mode === 'quick') {
+        // 빠른 게임: 먼저 기존 방 조인 시도 (진행 중인 게임은 백엔드에서 차단됨)
+        // 실패하면 새 방 생성
+        try {
+          newRoom = await clientRef.current.join<GameStateSchema>(ROOM_NAME, options || {});
+          if (DEBUG) {
+            console.log('[Colyseus] 빠른 게임: 기존 방 조인 성공');
+          }
+        } catch (error) {
+          // 조인 실패 시 새 방 생성
+          newRoom = await clientRef.current.create<GameStateSchema>(ROOM_NAME, options || {});
+          if (DEBUG) {
+            console.log('[Colyseus] 빠른 게임: 새 방 생성 (기존 방 없음)');
+          }
+        }
+      } else {
+        // 커스텀 게임: 기존 방 조인 또는 새 방 생성
+        newRoom = await clientRef.current.joinOrCreate<GameStateSchema>(ROOM_NAME, options || {});
+        if (DEBUG) {
+          console.log('[Colyseus] 커스텀 게임: 기존 방 조인 또는 새 방 생성');
+        }
+      }
 
       setRoom(newRoom);
       roomRef.current = newRoom; // ref에도 저장

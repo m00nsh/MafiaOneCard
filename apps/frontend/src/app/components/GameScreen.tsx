@@ -38,14 +38,19 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   const { showError } = useToast();
   const loadingDots = useLoadingDots(status === 'connecting');
 
-  // 컴포넌트 마운트 시 자동 연결
+  // 컴포넌트 마운트 시 자동 연결 (이미 연결되어 있지 않은 경우만)
   useEffect(() => {
+    // 이미 연결되어 있으면 연결하지 않음 (빠른 게임 모드에서 LoadingScreen에서 이미 연결함)
+    if (status === 'connected' || status === 'connecting') {
+      return;
+    }
+
     const characterId = selectedCharacters[0] as CharacterId | undefined;
     connect({ 
       name: nickname || `Player-${Math.random().toString(36).substr(2, 9)}`,
       characterId: characterId,
     });
-  }, [nickname, connect, selectedCharacters]);
+  }, [nickname, connect, selectedCharacters, status]);
 
   // 연결 상태 변경 알림
   useEffect(() => {
