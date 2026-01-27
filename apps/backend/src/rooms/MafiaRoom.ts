@@ -439,9 +439,11 @@ export class MafiaRoom extends Room<GameStateSchema> {
         this.deck.shuffle();
 
         // 3. Stats & Message
-        client.send("game_end", { winnerId: "", reason, stats: {} });
+        const rank = this.state.players.size; // 탈락한 시점의 인원 수 = 등수 (예: 4명 중 탈락 -> 4등)
+        client.send("game_end", { winnerId: "", reason, stats: { rank, handCount: player.hand.length } });
+
         this.state.players.delete(client.sessionId);
-        this.broadcast("announcement", `${client.sessionId} eliminated (${reason}).`);
+        this.broadcast("announcement", `${client.sessionId} eliminated (${reason}). Rank: ${rank}`);
 
         if (this.state.players.size === 1) {
             const winnerId = Array.from(this.state.players.keys())[0];
@@ -452,11 +454,64 @@ export class MafiaRoom extends Room<GameStateSchema> {
 
     private handleGameEnd(winnerId: string) {
         console.log(`Game Ended. Winner: ${winnerId}`);
+
+        // 랭킹 계산 (남은 카드 적은 순 -> 턴 순서)
+        const stats = this.calculateFinalStats(winnerId);
+
         this.broadcast("game_end", {
             winnerId,
             reason: 'hand_empty',
-            stats: {}
+            stats // { [sessionId]: { rank: 1, handCount: 0 }, ... }
         });
+    }
+
+    private calculateFinalStats(winnerId: string): any {
+        // 1. Setup Order Info
+        const allIds = Array.from(this.state.players.keys());
+        const winnerIndex = allIds.indexOf(winnerId);
+        const direction = this.state.direction || "clockwise";
+        const totalPlayers = allIds.length;
+
+        const players = Array.from(this.state.players.entries()).map(([id, player]) => {
+            // Distance Calculation (Tie-Breaker)
+            // Lower distance = Higher Rank (played sooner)
+            let myIndex = allIds.indexOf(id);
+            let distance = 0;
+
+            if (direction === "clockwise") {
+                distance = (myIndex - winnerIndex + totalPlayers) % totalPlayers;
+            } else {
+                distance = (winnerIndex - myIndex + totalPlayers) % totalPlayers;
+            }
+
+            return {
+                id,
+                handCount: player.hand.length,
+                distance // 0 for winner
+            };
+        });
+
+        // 2. Sort Logic
+        players.sort((a, b) => {
+            // Primary: Hand Count (Lower is better)
+            if (a.handCount !== b.handCount) {
+                return a.handCount - b.handCount;
+            }
+
+            // Secondary: Turn Distance (Lower is better / Sooner turn)
+            // If hand counts are equal, the one closer to the winner (in turn order) gets higher rank.
+            return a.distance - b.distance;
+        });
+
+        // 3. Assign Ranks
+        const stats: any = {};
+        players.forEach((p, index) => {
+            stats[p.id] = {
+                rank: index + 1,
+                handCount: p.handCount
+            };
+        });
+        return stats;
     }
 
     private sendError(client: Client, code: ErrorCode, message: string) {
