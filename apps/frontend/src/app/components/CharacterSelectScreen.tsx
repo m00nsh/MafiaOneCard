@@ -101,21 +101,21 @@ export default function CharacterSelectScreen({ onComplete }: CharacterSelectScr
 
   return (
     <LandscapeLayout>
-      <div className="size-full flex flex-col items-center justify-center p-4 sm:p-8 relative">
+      <div className="size-full flex flex-col items-center justify-center p-2 sm:p-4 relative">
         {/* Header - Top Left "캐릭터 선택하기" */}
-        <div className="absolute top-4 left-16 flex items-center gap-2">
-          <span className="text-white text-lg font-bold">캐릭터 선택하기</span>
+        <div className="absolute top-2 left-8 flex items-center gap-2">
+          <span className="text-white text-xl sm:text-2xl font-bold">캐릭터 선택하기</span>
         </div>
 
         {/* Header - Center */}
-        <div className="text-center mb-8">
-          <h2 className="text-2xl sm:text-3xl text-white font-bold mb-2">
-            직업 선택
+        <div className="text-center mb-3">
+          <h2 className="text-2xl sm:text-4xl text-white font-bold mb-1">
+            캐릭터 선택
           </h2>
-          <p className="text-white/80">게임에서 사용할 자신의 캐릭터를 선택해주세요</p>
+          <p className="text-white/80 text-base">게임에서 사용할 자신의 캐릭터를 선택해주세요</p>
         </div>
 
-        <div className="relative flex items-center gap-2 sm:gap-4 w-full max-w-6xl justify-center mb-8">
+        <div className="relative flex items-center gap-2 sm:gap-3 w-full max-w-7xl justify-center mb-3">
           <button
             onClick={handlePrevious}
             disabled={currentIndex === 0}
@@ -124,7 +124,7 @@ export default function CharacterSelectScreen({ onComplete }: CharacterSelectScr
             <ChevronLeft className="w-8 h-8 text-white" />
           </button>
 
-          <div className="flex gap-4 sm:gap-6 overflow-hidden justify-center items-stretch h-[320px]">
+          <div className="flex gap-3 sm:gap-4 overflow-hidden justify-center items-stretch h-[420px]">
             {visibleCharacters.map((character) => (
               <div
                 key={character.id}
@@ -132,21 +132,21 @@ export default function CharacterSelectScreen({ onComplete }: CharacterSelectScr
                 tabIndex={0}
                 onClick={() => setSelectedCharacterId(character.id)}
                 onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setSelectedCharacterId(character.id)}
-                className={`w-[200px] bg-white rounded-xl overflow-hidden cursor-pointer transition-all transform hover:scale-105 shadow-xl flex flex-col relative ${selectedCharacterId === character.id ? 'ring-4 ring-yellow-400 scale-105' : ''
+                className={`w-[240px] bg-white rounded-xl overflow-hidden cursor-pointer transition-all transform hover:scale-105 shadow-xl flex flex-col relative ${selectedCharacterId === character.id ? 'ring-4 ring-yellow-400 scale-105' : ''
                   }`}
               >
-                <div className="h-[140px] overflow-hidden">
+                <div className="h-[180px] overflow-hidden">
                   <ImageWithFallback
                     src={character.imageUrl}
                     alt={character.name}
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <div className="p-4 flex-1 flex flex-col items-center text-center bg-white">
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{character.name}</h3>
-                  <p className="text-sm text-gray-600 line-clamp-3 mb-2 flex-grow">{character.description}</p>
-                  <div className="mt-auto pt-2 w-full border-t border-gray-200">
-                    <p className="text-orange-600 font-bold text-sm">쿨타임: {character.cooldown}</p>
+                <div className="p-5 flex-1 flex flex-col items-center text-center bg-white">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-3">{character.name}</h3>
+                  <p className="text-base text-gray-600 line-clamp-4 mb-3 flex-grow leading-relaxed">{character.description}</p>
+                  <div className="mt-auto pt-3 w-full border-t border-gray-200">
+                    <p className="text-orange-600 font-bold text-base">쿨타임: {character.cooldown}</p>
                   </div>
                 </div>
                 {/* Selection Overlay */}
