@@ -1,4 +1,4 @@
-import { GameStateSchema, PlayerSchema, CharacterId, GAME_CONSTANTS, CardSuit, ErrorCode, CharacterSkill, CardSchema } from "@mafia/shared";
+import { GameStateSchema, PlayerSchema, CharacterId, GAME_CONSTANTS, CardSuit, ErrorCode, CharacterSkill, CardSchema, CHARACTER_SKILLS } from "@mafia/shared";
 import { Deck } from "../entities/Deck";
 import { TurnManager } from "./TurnManager";
 import { OneCardEngine } from "./OneCardEngine";
@@ -21,6 +21,31 @@ export class SkillManager {
         private turnManager: TurnManager,
         private engine: OneCardEngine // 승리 조건 체크 등 활용 가능
     ) { }
+
+    /**
+     * 주술사 스킬: 타겟 플레이어가 지목 가능한지 검증
+     * 지목 가능 조건:
+     * 1. 전체 플레이 중 능력을 사용할 수 있는 횟수가 정해진 능력 (소환사, 광전사) - skillUsesLeft > 0
+     * 2. 쿨타임이 전부 차 바로 사용 가능하거나, 본인의 턴에 쿨타임이 전부 차는 것이 보장되는 경우
+     *    (쿨타임이 n턴이면 게이지가 n-1 이상)
+     */
+    private canBeShamanTarget(targetPlayer: PlayerSchema): boolean {
+        const skillId = targetPlayer.characterId as CharacterId;
+        if (!skillId) return false;
+
+        const skillInfo = CHARACTER_SKILLS[skillId];
+        if (!skillInfo) return false;
+
+        // 1. 횟수 제한 스킬 (소환사, 광전사)
+        if (skillInfo.cooldown === 0 && skillInfo.maxUses) {
+            return targetPlayer.skillUsesLeft > 0;
+        }
+
+        // 2. 쿨타임 기반 스킬
+        // 쿨타임이 n턴이면, 게이지가 n-1 이상이면 이번 턴에 +1하면 차게 됨
+        const requiredProgress = skillInfo.cooldown - 1;
+        return targetPlayer.skillProgress >= requiredProgress;
+    }
 
     // 스킬 사용 메인 진입점
     useSkill(sessionId: string, skillId: CharacterId, targetId?: string, selectedCardId?: string, targetIds?: string[]): SkillResult {
@@ -229,17 +254,21 @@ export class SkillManager {
                 }
                 break;
 
-            case 'shaman': // 주술사: 타겟 지정 (강제 스킬)
+            case 'shaman': // 주술사: 타겟 지정 (강제 스킬, 거부권 없음)
                 if (!targetId) return { success: false, error: { message: "Target required" } };
                 const targetS = this.state.players.get(targetId);
                 if (!targetS) return { success: false, error: { message: "Invalid target" } };
 
-                // 타겟에게 'shaman_cursed' 효과 부여
-                // (이 효과는 Target의 턴 시작 시 체크하여 강제 사용 유도)
-                targetS.activeEffects.push("shaman_cursed");
-                // 주술사와 타겟은 스킬 사용 전까지 쿨타임 고정 (이는 Cooldown 로직에서 처리)
+                // 타겟 검증: 지목 가능한 플레이어인지 확인
+                if (!this.canBeShamanTarget(targetS)) {
+                    return { success: false, error: { message: "Target cannot use skill in their next turn" } };
+                }
 
-                result.message = "Cursed target to use skill.";
+                // 타겟에게 'shaman_forced_skill' 효과 부여
+                // (이 효과는 Target의 턴 시작 시 자동으로 스킬을 사용하게 함)
+                targetS.activeEffects.push("shaman_forced_skill");
+
+                result.message = "Target will be forced to use skill on their turn.";
                 break;
 
             case 'summoner': // 소환사: 타겟 스킬 복사 사용
@@ -334,10 +363,10 @@ export class SkillManager {
             player.skillProgress = 0; // 게이지 초기화
         }
 
-        // 3-1. 주술사 저주 해제 (스킬 사용으로 순응함)
-        const curseIdx = player.activeEffects.indexOf("shaman_cursed");
-        if (curseIdx !== -1) {
-            player.activeEffects.splice(curseIdx, 1);
+        // 3-1. 주술사 강제 스킬 효과 해제 (스킬 사용 완료)
+        const forcedIdx = player.activeEffects.indexOf("shaman_forced_skill");
+        if (forcedIdx !== -1) {
+            player.activeEffects.splice(forcedIdx, 1);
         }
 
         // 4. 즉시 승리/파산 검증 (CRITICAL)
@@ -392,11 +421,56 @@ export class SkillManager {
             player.skillProgress += 1;
         }
 
-        // 주술사 저주 체크 ('shaman_cursed')
-        // 만약 저주 상태라면, 이번 턴에 무조건 스킬을 써야 함.
-        // 클라이언트에게 "Must use skill" 플래그를 보낼 수 있음 (ActiveEffects로 이미 동기화됨)
-        // 사용자가 스킬을 안 쓰고 턴을 넘기려 하면(카드 내기/뽑기), Engine/Room에서 막거나 자동 발동?
-        // 기획서: "거부 시 카드 3장" -> 턴을 넘기려 할 때 체크해야 함.
-        // 이는 OneCardEngine.processCardPlay나 MafiaRoom.handleDraw에서 체크 필요.
+        // 주술사 강제 스킬 체크 ('shaman_forced_skill')
+        // 만약 강제 스킬 효과가 있다면, 이번 턴에 자동으로 스킬을 사용함 (거부권 없음)
+        if (player.activeEffects.includes("shaman_forced_skill")) {
+            this.forceSkillUse(playerId, player);
+        }
+    }
+
+    /**
+     * 주술사에 의해 강제된 스킬 사용 처리
+     * 타겟 플레이어의 턴이 시작되면 자동으로 스킬을 사용함
+     */
+    private forceSkillUse(playerId: string, player: PlayerSchema): void {
+        const skillId = player.characterId as CharacterId;
+        if (!skillId) {
+            // 캐릭터가 없으면 효과 제거
+            const idx = player.activeEffects.indexOf("shaman_forced_skill");
+            if (idx !== -1) player.activeEffects.splice(idx, 1);
+            return;
+        }
+
+        // 스킬 사용 가능 여부 재확인 (턴 시작 시 쿨타임이 충전되었을 수 있음)
+        const skillInfo = CHARACTER_SKILLS[skillId];
+        if (!skillInfo) {
+            const idx = player.activeEffects.indexOf("shaman_forced_skill");
+            if (idx !== -1) player.activeEffects.splice(idx, 1);
+            return;
+        }
+
+        // 횟수 제한 스킬 체크
+        if (skillInfo.cooldown === 0 && skillInfo.maxUses) {
+            if (player.skillUsesLeft <= 0) {
+                // 사용 횟수가 없으면 효과 제거 (이론적으로는 발생하지 않아야 함)
+                const idx = player.activeEffects.indexOf("shaman_forced_skill");
+                if (idx !== -1) player.activeEffects.splice(idx, 1);
+                return;
+            }
+        } else {
+            // 쿨타임 기반 스킬 체크 (이제 쿨타임이 차야 함)
+            if (player.skillProgress < player.skillMaxCooldown) {
+                // 아직 쿨타임이 안 찼으면 효과 제거 (이론적으로는 발생하지 않아야 함)
+                const idx = player.activeEffects.indexOf("shaman_forced_skill");
+                if (idx !== -1) player.activeEffects.splice(idx, 1);
+                return;
+            }
+        }
+
+        // 자동으로 스킬 사용 (타겟이 필요한 스킬은 랜덤 선택)
+        // 주의: 이 함수는 MafiaRoom에서 호출되어야 하므로, 여기서는 직접 스킬을 실행하지 않고
+        // 플래그만 설정하고 MafiaRoom에서 처리하도록 함
+        // 또는 여기서 직접 executeSkill을 호출할 수도 있지만, 메시지 브로드캐스트 등을 고려해야 함
+        // 일단은 MafiaRoom에서 처리하도록 플래그만 남겨둠
     }
 }

@@ -58,6 +58,9 @@ export class MafiaRoom extends Room<GameStateSchema> {
 
             this.skillManager.onTurnStart(playerId);
 
+            // 주술사 강제 스킬 처리 (턴 시작 시 자동 스킬 사용)
+            this.handleShamanForcedSkill(playerId);
+
             // Turn Timer (10s)
             this.startTimer(10, () => this.handleTurnTimeout(playerId));
 
@@ -236,9 +239,6 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 return;
             }
 
-            // Shaman Penalty Check
-            if (this.checkShamanPenalty(client)) return;
-
             // Logic Delegation
             const result = this.engine.processCardPlay(client.sessionId, message.cardId, message.selectedSuit);
 
@@ -274,9 +274,6 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 this.sendError(client, ErrorCode.NOT_YOUR_TURN, "Not your turn.");
                 return;
             }
-
-            // Shaman Penalty Check
-            if (this.checkShamanPenalty(client)) return;
 
             this.handleDrawCard(client);
         });
@@ -349,48 +346,125 @@ export class MafiaRoom extends Room<GameStateSchema> {
         });
     }
 
-    private checkShamanPenalty(client: Client): boolean {
-        const player = this.state.players.get(client.sessionId);
-        // Only trigger if actually cursed
-        if (!player || !player.activeEffects.includes("shaman_cursed")) return false;
+    /**
+     * 주술사 강제 스킬 처리
+     * 타겟 플레이어의 턴이 시작되면 자동으로 스킬을 사용함 (거부권 없음)
+     */
+    private handleShamanForcedSkill(playerId: string): void {
+        const player = this.state.players.get(playerId);
+        if (!player || !player.activeEffects.includes("shaman_forced_skill")) return;
 
-        console.log(`${client.sessionId} refused skill -> Applying Shaman Penalty`);
+        const skillId = player.characterId as CharacterId;
+        if (!skillId) {
+            // 캐릭터가 없으면 효과 제거
+            const idx = player.activeEffects.indexOf("shaman_forced_skill");
+            if (idx !== -1) player.activeEffects.splice(idx, 1);
+            return;
+        }
 
-        // Apply Penalty (Draw 3)
-        const penaltyCount = GAME_CONSTANTS.SHAMAN_PENALTY || 3;
-        const drawnCards = [];
-        for (let i = 0; i < penaltyCount; i++) {
-            if (this.deck.count === 0) {
-                this.deck.replenish();
-                if (this.deck.count === 0) break;
+        // 스킬 사용 가능 여부 재확인
+        const skillInfo = CHARACTER_SKILLS[skillId];
+        if (!skillInfo) {
+            const idx = player.activeEffects.indexOf("shaman_forced_skill");
+            if (idx !== -1) player.activeEffects.splice(idx, 1);
+            return;
+        }
+
+        // 횟수 제한 스킬 체크
+        if (skillInfo.cooldown === 0 && skillInfo.maxUses) {
+            if (player.skillUsesLeft <= 0) {
+                const idx = player.activeEffects.indexOf("shaman_forced_skill");
+                if (idx !== -1) player.activeEffects.splice(idx, 1);
+                return;
             }
-            const card = this.deck.draw();
-            if (card) {
-                drawnCards.push(card);
-                player.hand.push(new CardSchema(card.id, card.suit, card.rank));
+        } else {
+            // 쿨타임 기반 스킬 체크
+            if (player.skillProgress < player.skillMaxCooldown) {
+                const idx = player.activeEffects.indexOf("shaman_forced_skill");
+                if (idx !== -1) player.activeEffects.splice(idx, 1);
+                return;
             }
         }
 
-        // Remove Curse
-        const idx = player.activeEffects.indexOf("shaman_cursed");
-        if (idx !== -1) player.activeEffects.splice(idx, 1);
+        // 자동으로 스킬 사용
+        // 타겟이 필요한 스킬의 경우 랜덤 선택 (봇 로직 활용)
+        let targetId: string | undefined;
+        let selectedCardId: string | undefined;
+        let targetIds: string[] | undefined;
 
-        // Notify
-        this.state.deckCount = this.deck.count;
-        // Reusing draw_card_response structure, though it expects one card. 
-        // We'll just send the first one or generic success. Client might need update to handle 'message'.
-        client.send("draw_card_response", { success: true, drawnCard: drawnCards[0] });
-        this.broadcast("announcement", `${player.nickname} refused skill use and took ${drawnCards.length} cards penalty!`);
-
-        // Next Turn
-        this.turnManager.nextTurn();
-
-        // Burst Check
-        if (player.hand.length > GAME_CONSTANTS.MAX_HAND_SIZE) {
-            this.handlePlayerElimination(client, 'burst');
+        // 타겟이 필요한 스킬 처리
+        if (skillId === 'merchant' || skillId === 'shaman' || skillId === 'summoner' || skillId === 'assassin') {
+            // 랜덤 타겟 선택 (본인 제외)
+            const opponents = Array.from(this.state.players.entries())
+                .filter(([id]) => id !== playerId)
+                .map(([id]) => id);
+            if (opponents.length > 0) {
+                targetId = opponents[Math.floor(Math.random() * opponents.length)];
+            }
+        } else if (skillId === 'berserker') {
+            // 광전사: 2명 선택 (2인 플레이에서는 1명)
+            const opponents = Array.from(this.state.players.entries())
+                .filter(([id]) => id !== playerId)
+                .map(([id]) => id);
+            const targetCount = opponents.length >= 2 ? 2 : 1;
+            targetIds = opponents.slice(0, targetCount);
         }
 
-        return true;
+        // 잡상인: 카드 선택
+        if (skillId === 'merchant' && player.hand.length > 0) {
+            const randomCardIndex = Math.floor(Math.random() * player.hand.length);
+            selectedCardId = Array.from(player.hand)[randomCardIndex].id;
+        }
+
+        // 스킬 실행
+        const result = this.skillManager.useSkill(playerId, skillId, targetId, selectedCardId, targetIds);
+        
+        if (result.success) {
+            // 스킬 사용 성공 알림
+            this.broadcast("skill_used", {
+                playerId: playerId,
+                skillId: skillId,
+                targetPlayerId: targetId,
+                targetPlayerIds: targetIds
+            });
+
+            // 예언자 스킬 결과 전송
+            if (skillId === 'prophet' && result.prophetCards) {
+                const targetPlayer = result.targetPlayerId ? this.state.players.get(result.targetPlayerId) : null;
+                const targetPlayerName = targetPlayer?.nickname || '플레이어';
+                const client = Array.from(this.clients.values()).find(c => c.sessionId === playerId);
+                if (client) {
+                    client.send("prophet_result", {
+                        cards: result.prophetCards,
+                        targetPlayerId: result.targetPlayerId,
+                        targetPlayerName: targetPlayerName,
+                        totalCards: targetPlayer ? targetPlayer.hand.length : 0
+                    });
+                }
+            }
+
+            // 게임 종료 체크
+            if (result.isGameEnded) {
+                this.handleGameEnd(this.state.winnerId);
+            }
+            if (result.eliminatedPlayerIds && result.eliminatedPlayerIds.length > 0) {
+                // 파산 처리
+                result.eliminatedPlayerIds.forEach(eliminatedId => {
+                    const eliminatedClient = Array.from(this.clients.values()).find(c => c.sessionId === eliminatedId);
+                    if (eliminatedClient) {
+                        eliminatedClient.send("game_end", {
+                            winnerId: this.state.winnerId,
+                            myRank: 0 // 파산한 플레이어는 0등
+                        });
+                        eliminatedClient.leave(1000, "Burst");
+                    }
+                });
+            }
+        } else {
+            // 스킬 사용 실패 시 효과 제거
+            const idx = player.activeEffects.indexOf("shaman_forced_skill");
+            if (idx !== -1) player.activeEffects.splice(idx, 1);
+        }
     }
 
     private handleDrawCard(client: Client) {

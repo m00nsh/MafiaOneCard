@@ -116,7 +116,7 @@ export const CHARACTER_SKILLS: Record<CharacterId, CharacterSkill> = {
     shaman: {
         id: 'shaman',
         name: '주술사',
-        description: '특정 플레이어를 지목해 스킬을 강제로 사용시키기 (거부 시 카드 3장)',
+        description: '특정 플레이어를 지목해 가장 빠르게 찾아오는 그 플레이어의 턴에 스킬을 강제로 사용시키기 (거부권 없음)',
         cooldown: 3,
     },
     summoner: {
