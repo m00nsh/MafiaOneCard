@@ -17,7 +17,7 @@ export class MafiaRoom extends Room<GameStateSchema> {
 
     // Timer
     private currentTimer?: Delayed;
-    
+
     // Game Mode
     private gameMode: 'quick' | 'custom' = 'custom';
     
@@ -39,7 +39,7 @@ export class MafiaRoom extends Room<GameStateSchema> {
         this.engine = new OneCardEngine(this.state, this.deck, this.turnManager);
         this.skillManager = new SkillManager(this.state, this.deck, this.turnManager, this.engine);
         this.botManager = new BotManager(this.state, this.engine);
-        
+
         // Store game mode for later use
         this.gameMode = options?.mode || 'custom';
 
@@ -302,6 +302,11 @@ export class MafiaRoom extends Room<GameStateSchema> {
         });
 
         // [Action] Use Skill
+        this.onMessage("check_summon_target", (client, message: { targetId: string }) => {
+            const result = this.skillManager.checkSummonTarget(message.targetId);
+            client.send("summoner_check_result", result);
+        });
+
         this.onMessage("use_skill", (client, message: UseSkillMessage) => {
             if (this.state.status !== "PLAYING") return;
 
@@ -411,6 +416,7 @@ export class MafiaRoom extends Room<GameStateSchema> {
         }
 
         // 클라이언트에게 스킬 사용 신호 전송 (팝업 강제 오픈)
+        // 사용자가 직접 스킬을 선택할 수 있도록 프론트엔드에서 팝업을 열도록 함
         const client = Array.from(this.clients.values()).find(c => c.sessionId === playerId);
         if (client) {
             client.send("shaman_force_skill", {
@@ -507,7 +513,7 @@ export class MafiaRoom extends Room<GameStateSchema> {
     private checkStartGame() {
         try {
             if (this.state.status === "PLAYING") return;
-            
+
             // 빠른 게임 모드: 최소 3명 필요
             // 커스텀 게임 모드: 최소 2명 필요
             const minPlayers = this.gameMode === 'quick' ? 3 : 2;
@@ -605,19 +611,19 @@ export class MafiaRoom extends Room<GameStateSchema> {
 
     onJoin(client: Client, options: any) {
         console.log(`${client.sessionId} joined.`);
-        
+
         // 빠른 게임 모드로 접속하려는 경우, 진행 중인 게임에 합류 방지
         const requestedMode = options?.mode || 'custom';
         if (requestedMode === 'quick' && this.state.status === "PLAYING") {
             console.log(`[REJECT] 빠른 게임 플레이어가 진행 중인 게임에 접속 시도. 거부합니다.`);
-            client.send("announcement", { 
-                message: "진행 중인 게임이 있습니다. 잠시 후 다시 시도해주세요.", 
-                type: "error" 
+            client.send("announcement", {
+                message: "진행 중인 게임이 있습니다. 잠시 후 다시 시도해주세요.",
+                type: "error"
             });
             client.leave(1000, "Game already in progress");
             return;
         }
-        
+
         // 이전 게임이 종료된 상태에서 새로운 플레이어가 접속한 경우 상태 리셋
         if (this.state.status === "ENDED") {
             console.log("Previous game ended. Resetting room state to LOBBY.");
@@ -635,7 +641,7 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 player.hand.clear();
             });
         }
-        
+
         const player = new PlayerSchema();
         if (options?.name) player.nickname = options.name;
         if (options?.characterId) {
@@ -643,20 +649,20 @@ export class MafiaRoom extends Room<GameStateSchema> {
             console.log(`${client.sessionId} selected character: ${options.characterId}`);
         }
         if (this.state.players.size === 0) player.isHost = true;
-        
+
         // 게임 모드 업데이트 (새 플레이어가 빠른 게임 모드로 접속한 경우)
         if (options?.mode) {
             this.gameMode = options.mode;
         }
-        
+
         // 빠른 게임 모드: 플레이어 입장 시 자동으로 준비 상태로 설정
         if (this.gameMode === 'quick') {
             player.isReady = true;
             console.log(`${client.sessionId} auto-ready in quick match mode.`);
         }
-        
+
         this.state.players.set(client.sessionId, player);
-        
+
         // 빠른 게임 모드: 플레이어 접속 시마다 타이머 리셋
         // 마지막 플레이어 접속 시점부터 5초 후 checkLobbyTimerStep1 호출
         // 게임 시작은 타이머가 만료된 후에만 처리 (즉시 시작 방지)
@@ -664,7 +670,7 @@ export class MafiaRoom extends Room<GameStateSchema> {
             console.log(`Player joined. Resetting lobby timer (5s from now)...`);
             this.startTimer(5, () => this.checkLobbyTimerStep1());
         }
-        
+
         // 커스텀 게임 모드: 플레이어가 준비 버튼을 눌렀을 때만 게임 시작 확인
         // 빠른 게임 모드에서는 타이머가 만료된 후에만 게임 시작 (checkLobbyTimerStep1에서 처리)
         if (this.gameMode === 'custom') {

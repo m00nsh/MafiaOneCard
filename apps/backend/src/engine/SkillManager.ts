@@ -153,7 +153,7 @@ export class SkillManager {
                 // 현재 진행 방향 기준으로 이전/다음 플레이어 찾기
                 const playerIds = Array.from(this.state.players.keys());
                 const myIndex = playerIds.indexOf(sessionId);
-                
+
                 // 방향에 따라 이전/다음 인덱스 계산
                 let prevIndex: number;
                 let nextIndex: number;
@@ -181,15 +181,15 @@ export class SkillManager {
                     // 이전 플레이어의 카드 1장 랜덤 선택
                     const prevRandIdx = Math.floor(Math.random() * prevPlayer.hand.length);
                     const [prevCard] = prevPlayer.hand.splice(prevRandIdx, 1);
-                    
+
                     // 다음 플레이어의 카드 1장 랜덤 선택
                     const nextRandIdx = Math.floor(Math.random() * nextPlayer.hand.length);
                     const [nextCard] = nextPlayer.hand.splice(nextRandIdx, 1);
-                    
+
                     // 교환: 이전 플레이어의 카드를 다음 플레이어에게, 다음 플레이어의 카드를 이전 플레이어에게
                     prevPlayer.hand.push(nextCard);
                     nextPlayer.hand.push(prevCard);
-                    
+
                     affectedPlayers.add(prevId);
                     affectedPlayers.add(nextId);
                     result.message = "Swapped cards between neighbors.";
@@ -203,11 +203,11 @@ export class SkillManager {
                 // 현재 진행 방향 기준으로 다음 플레이어 찾기
                 const prophetPlayerIds = Array.from(this.state.players.keys());
                 const prophetMyIndex = prophetPlayerIds.indexOf(sessionId);
-                
+
                 if (prophetMyIndex === -1) {
                     return { success: false, error: { message: "Player not found" } };
                 }
-                
+
                 // 방향에 따라 다음 플레이어 인덱스 계산
                 let prophetNextIndex: number;
                 if (this.state.direction === 'clockwise') {
@@ -217,18 +217,18 @@ export class SkillManager {
                     // 반시계 방향: 다음 = 왼쪽
                     prophetNextIndex = (prophetMyIndex - 1 + prophetPlayerIds.length) % prophetPlayerIds.length;
                 }
-                
+
                 const prophetNextPlayerId = prophetPlayerIds[prophetNextIndex];
                 const prophetNextPlayer = this.state.players.get(prophetNextPlayerId);
-                
+
                 if (!prophetNextPlayer) {
                     return { success: false, error: { message: "Next player not found" } };
                 }
-                
+
                 // 다음 플레이어의 손패에서 랜덤으로 카드 선택
                 const prophetHandArray = Array.from(prophetNextPlayer.hand);
                 const prophetCardsToShow = Math.min(3, prophetHandArray.length); // 3장 또는 모든 카드
-                
+
                 if (prophetHandArray.length === 0) {
                     result.message = "Next player has no cards.";
                     result.targetPlayerId = prophetNextPlayerId;
@@ -240,14 +240,14 @@ export class SkillManager {
                         const j = Math.floor(Math.random() * (i + 1));
                         [prophetShuffled[i], prophetShuffled[j]] = [prophetShuffled[j], prophetShuffled[i]];
                     }
-                    
+
                     // 앞에서 cardsToShow개 선택
                     const prophetSelectedCards = prophetShuffled.slice(0, prophetCardsToShow).map(card => ({
                         id: card.id,
                         suit: card.suit,
                         rank: card.rank
                     }));
-                    
+
                     result.prophetCards = prophetSelectedCards;
                     result.targetPlayerId = prophetNextPlayerId;
                     result.message = `Peeked ${prophetSelectedCards.length} card(s) from next player.`;
@@ -272,23 +272,51 @@ export class SkillManager {
                 break;
 
             case 'summoner': // 소환사: 타겟 스킬 복사 사용
-                // 구현 복잡도 높음: 타겟의 스킬 ID를 가져와서 executeSkill 재귀 호출?
                 if (!targetId) return { success: false, error: { message: "Target required" } };
                 const targetSummon = this.state.players.get(targetId);
                 if (!targetSummon) return { success: false, error: { message: "Invalid target" } };
 
-                const copiedSkill = targetSummon.characterId as CharacterId; // 가정
+                const copiedSkill = targetSummon.characterId as CharacterId;
                 if (!copiedSkill) return { success: false, error: { message: "Target has no skill" } };
 
-                // 재귀 호출로 효과 실행
-                // 주의: 소환사 본인의 횟수 차감은 이미 validate에서 체크했으나, executeSkill 내에서는 차감 로직 별도 필요
-                // 여기서는 '효과'만 빌려옴.
-                const subResult = this.executeSkill(sessionId, player, copiedSkill, targetId /* Some skills need target */, selectedCardId, targetIds);
+                // 1. Validation (복사 가능 여부 체크)
+                const skillInfo = CHARACTER_SKILLS[copiedSkill];
+                if (skillInfo?.maxUses && skillInfo.cooldown === 0) {
+                    // 횟수 제한 스킬: 남은 횟수가 있어야 복사 가능
+                    if (targetSummon.skillUsesLeft <= 0) {
+                        return { success: false, error: { message: "Target has no charges left" } };
+                    }
+                }
+                // 쿨타임 스킬: 쿨타임이 안 찼어도 소환사는 복사 가능 (조건 없음)
+
+                // 2. Execution (재귀 호출)
+                // 소환사의 추가 입력값(selectedCardId, targetIds)을 그대로 전달
+                // 중요: 타겟형 스킬(암살자 등)이면 targetIds[0]을 메인 targetId로 교체해서 전달해야 함
+                // (기존 targetId는 '능력 출처'일 뿐이고, 실제 스킬 대상은 2차 선택한 타겟임)
+                let skillExecutionTargetId = targetId;
+                if (targetIds && targetIds.length > 0) {
+                    // 광전사 등 다중 타겟은 targetIds를 그대로 쓰지만,
+                    // 암살자/주술사 등 단일 타겟 스킬은 첫 번째 타겟을 메인 targetId로 사용
+                    skillExecutionTargetId = targetIds[0];
+                }
+
+                const subResult = this.executeSkill(sessionId, player, copiedSkill, skillExecutionTargetId, selectedCardId, targetIds);
                 if (!subResult.success) return subResult;
 
-                // 성공 시 '타겟'의 쿨타임 리셋 (소환사 룰: 선택된 플레이어는 스킬 사용한걸로 간주)
-                targetSummon.skillProgress = 0;
-                targetSummon.skillUsesLeft -= 1; // 횟수제라면 차감 (0 이하는 무시)
+                // 3. Side Effects (성공 시)
+                // 타겟의 쿨타임/횟수 리셋
+                if (skillInfo?.maxUses && skillInfo.cooldown === 0) {
+                    targetSummon.skillUsesLeft = Math.max(0, targetSummon.skillUsesLeft - 1);
+                } else {
+                    targetSummon.skillProgress = 0;
+                }
+
+                // 주술사 강제 스킬 효과 해제 (타겟이 저주받은 상태였다면, 소환사가 써준 걸로 퉁침?)
+                // 기획 확인: "소환사가 사용한 순간 이 고정도 풀리고 0으로 리셋되어야 합니다."
+                const forcedIdx = targetSummon.activeEffects.indexOf("shaman_forced_skill");
+                if (forcedIdx !== -1) {
+                    targetSummon.activeEffects.splice(forcedIdx, 1);
+                }
 
                 result = subResult;
                 result.message = `Copied ${copiedSkill} from ${targetSummon.nickname}`;
@@ -472,5 +500,48 @@ export class SkillManager {
         // 플래그만 설정하고 MafiaRoom에서 처리하도록 함
         // 또는 여기서 직접 executeSkill을 호출할 수도 있지만, 메시지 브로드캐스트 등을 고려해야 함
         // 일단은 MafiaRoom에서 처리하도록 플래그만 남겨둠
+    }
+
+    /**
+     * 소환사 스킬: 지목한 타겟의 스킬 정보와 필요 입력값 반환
+     */
+    checkSummonTarget(targetId: string): { success: boolean; role?: CharacterId; requiredInput?: 'CARD' | 'TARGET' | 'NONE'; error?: string } {
+        const targetPlayer = this.state.players.get(targetId);
+        if (!targetPlayer) return { success: false, error: "Invalid target" };
+
+        const skillId = targetPlayer.characterId as CharacterId;
+        if (!skillId) return { success: false, error: "Target has no skill" };
+
+        // 1. Validation (복사 가능 여부 확인)
+        const skillInfo = CHARACTER_SKILLS[skillId];
+        if (skillInfo?.maxUses && skillInfo.cooldown === 0) {
+            if (targetPlayer.skillUsesLeft <= 0) {
+                return { success: false, error: "Target has no charges left" };
+            }
+        }
+
+        // 2. Requirements Check
+        // 스킬별 필요 입력값 정의
+        let requiredInput: 'CARD' | 'TARGET' | 'NONE' = 'NONE';
+
+        switch (skillId) {
+            case 'merchant': // 잡상인: 카드 필요
+                requiredInput = 'CARD';
+                break;
+            // combiner removed (not in CharacterId)
+
+            case 'assassin': // 암살자: 타겟 필요
+            case 'shaman': // 주술사: 타겟 필요
+            case 'berserker': // 광전사: 타겟 필요 (2명)
+            case 'summoner': // 소환사: 소환사를 또 복사? (금지 or 타겟)
+                requiredInput = 'TARGET';
+                break;
+
+            default:
+                requiredInput = 'NONE';
+                break;
+        }
+
+        return { success: true, role: skillId, requiredInput };
     }
 }
