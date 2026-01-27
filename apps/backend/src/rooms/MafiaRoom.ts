@@ -380,9 +380,11 @@ export class MafiaRoom extends Room<GameStateSchema> {
             });
 
             // 4. Initial Card
+            // 4. Initial Card
             const initial = this.deck.draw();
             if (initial) {
-                this.deck.pushToDiscard(initial);
+                // Do NOT push to discard yet. It stays as TopCard.
+                // Engine will push it to discard when the next card is played.
                 this.state.topCard = new CardSchema(initial.id, initial.suit, initial.rank);
             }
             this.state.deckCount = this.deck.count;
