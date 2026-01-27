@@ -47,6 +47,9 @@ export class MafiaRoom extends Room<GameStateSchema> {
             }
         };
 
+        // 3. Message Handlers Registration (CRITICAL!)
+        this.setupMessageHandlers();
+
         // 4. Lobby Timer (Quick Mode)
         if (options.mode === 'quick' || !options.mode) {
             this.startTimer(10, () => this.fillBotsAndStart());
