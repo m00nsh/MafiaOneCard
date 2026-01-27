@@ -34,7 +34,12 @@ export default function LoadingScreen({ onComplete, onBack }: LoadingScreenProps
 
   return (
     <LandscapeLayout>
-      <div className="size-full flex flex-col items-center justify-center p-4 sm:p-8 relative">
+      <div 
+        className="size-full flex flex-col items-center justify-center p-4 sm:p-8 relative bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: 'url(/Lobby_background.png)',
+        }}
+      >
         {/* Header - Top Left "빠른 게임" */}
         <div className="absolute top-4 left-16 flex items-center gap-2">
           <span className="text-white text-lg font-bold">빠른 게임</span>

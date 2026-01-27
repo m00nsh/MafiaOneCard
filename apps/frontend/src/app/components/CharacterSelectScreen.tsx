@@ -101,7 +101,12 @@ export default function CharacterSelectScreen({ onComplete }: CharacterSelectScr
 
   return (
     <LandscapeLayout>
-      <div className="size-full flex flex-col items-center justify-center p-2 sm:p-4 relative">
+      <div 
+        className="size-full flex flex-col items-center justify-center p-2 sm:p-4 relative bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: 'url(/Lobby_background.png)',
+        }}
+      >
         {/* Header - Top Left "캐릭터 선택하기" */}
         <div className="absolute top-2 left-8 flex items-center gap-2">
           <span className="text-white text-xl sm:text-2xl font-bold">캐릭터 선택하기</span>

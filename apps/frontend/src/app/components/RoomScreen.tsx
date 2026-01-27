@@ -131,7 +131,12 @@ export default function RoomScreen({
   if (!isHost && players.length === 0) {
     return (
       <LandscapeLayout>
-        <div className="size-full flex flex-col items-center justify-center p-4 sm:p-8 relative">
+        <div 
+          className="size-full flex flex-col items-center justify-center p-4 sm:p-8 relative bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: 'url(/Lobby_background.png)',
+          }}
+        >
           {/* Header - Top Left */}
           <div className="absolute top-4 left-16 flex items-center gap-2">
             <span className="text-white text-3xl font-bold">맞춤 게임</span>
@@ -180,7 +185,12 @@ export default function RoomScreen({
   // Room view (for both host and guest after joining)
   return (
     <LandscapeLayout>
-      <div className="size-full flex flex-col items-center p-4 sm:p-8 relative">
+      <div 
+        className="size-full flex flex-col items-center p-4 sm:p-8 relative bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: 'url(/Lobby_background.png)',
+        }}
+      >
         {/* Header - Top Left */}
         <div className="absolute top-4 left-16 flex items-center gap-2">
           <span className="text-white text-3xl font-bold">맞춤 게임</span>

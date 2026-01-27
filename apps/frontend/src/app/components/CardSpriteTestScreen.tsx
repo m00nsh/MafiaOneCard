@@ -13,7 +13,12 @@ export default function CardSpriteTestScreen({ onBack }: CardSpriteTestScreenPro
 
     return (
         <LandscapeLayout>
-            <div className="size-full flex flex-col p-4 sm:p-8 bg-gray-900 overflow-auto">
+            <div 
+              className="size-full flex flex-col p-4 sm:p-8 overflow-auto bg-cover bg-center bg-no-repeat"
+              style={{
+                backgroundImage: 'url(/Lobby_background.png)',
+              }}
+            >
                 <div className="flex items-center gap-4 mb-8">
                     <button
                         onClick={onBack}

@@ -25,7 +25,12 @@ export default function GameModeScreen({ onSelectMode, onSetNickname, onBack }: 
 
   return (
     <LandscapeLayout>
-      <div className="size-full flex flex-col items-center justify-center p-4 sm:p-8 relative">
+      <div 
+        className="size-full flex flex-col items-center justify-center p-4 sm:p-8 relative bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: 'url(/Lobby_background.png)',
+        }}
+      >
         {/* Top Bar: Back Button */}
         <div className="absolute top-4 left-4 z-10">
           <button
