@@ -213,6 +213,7 @@ export class GameStateSchema extends Schema {
     @type("string") selectedSuit: string = "";
     @type("number") deckCount: number = 0;
     @type("string") winnerId: string = "";
+    @type("number") timerEndTime: number = 0; // Timestamp (Date.now() + duration)
 }
 
 // ============================================================================
