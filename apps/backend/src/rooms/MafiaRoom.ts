@@ -317,75 +317,86 @@ export class MafiaRoom extends Room<GameStateSchema> {
     }
 
     private checkStartGame() {
-        if (this.state.status === "PLAYING") return;
-        if (this.state.players.size < 2) return;
+        try {
+            if (this.state.status === "PLAYING") return;
+            if (this.state.players.size < 2) return;
 
-        let allReady = true;
-        this.state.players.forEach((player) => {
-            if (!player.isReady) allReady = false;
-        });
+            let allReady = true;
+            this.state.players.forEach((player) => {
+                if (!player.isReady) allReady = false;
+            });
 
-        if (allReady) {
-            this.startGame();
+            if (allReady) {
+                this.startGame();
+            }
+        } catch (e) {
+            console.error("Error in checkStartGame:", e);
         }
     }
 
     private startGame() {
-        this.state.status = "PLAYING";
+        try {
+            console.log("Starting game...");
+            this.state.status = "PLAYING";
 
-        // 1. Prepare Deck
-        // 1. Prepare Deck
-        this.deck.create();
-        this.deck.shuffle();
+            // 1. Prepare Deck
+            this.deck.create();
+            this.deck.shuffle();
 
-        // 2. Assign Random Characters & Init Cooldowns
-        const skillKeys = Object.keys(CHARACTER_SKILLS) as CharacterId[];
+            // 2. Assign Random Characters & Init Cooldowns
+            const skillKeys = Object.keys(CHARACTER_SKILLS) as CharacterId[];
+            if (skillKeys.length === 0) throw new Error("No skills defined");
 
-        this.state.players.forEach((player, sessionId) => {
-            // Assign random character if not set (or always random for now)
-            if (!player.characterId) {
-                const randomSkill = skillKeys[Math.floor(Math.random() * skillKeys.length)];
-                player.characterId = randomSkill;
-            }
-
-            const skillInfo = CHARACTER_SKILLS[player.characterId as CharacterId];
-            if (skillInfo) {
-                if (skillInfo.cooldown === 0) {
-                    player.skillUsesLeft = skillInfo.maxUses || 0;
-                    player.skillMaxCooldown = 0;
-                } else {
-                    player.skillMaxCooldown = skillInfo.cooldown;
-                    player.skillProgress = 0; // Start with 0 charge
+            this.state.players.forEach((player, sessionId) => {
+                // Assign random character if not set (or always random for now)
+                if (!player.characterId) {
+                    const randomSkill = skillKeys[Math.floor(Math.random() * skillKeys.length)];
+                    player.characterId = randomSkill;
                 }
-            }
-        });
 
-        // 3. Distribute
-        this.state.players.forEach((player, sessionId) => {
-            player.hand.clear(); // Reset hand just in case
-            for (let i = 0; i < GAME_CONSTANTS.INITIAL_HAND_SIZE; i++) {
-                const card = this.deck.draw();
-                if (card) player.hand.push(new CardSchema(card.id, card.suit, card.rank));
-            }
-        });
+                const skillInfo = CHARACTER_SKILLS[player.characterId as CharacterId];
+                if (skillInfo) {
+                    if (skillInfo.cooldown === 0) {
+                        player.skillUsesLeft = skillInfo.maxUses || 0;
+                        player.skillMaxCooldown = 0;
+                    } else {
+                        player.skillMaxCooldown = skillInfo.cooldown;
+                        player.skillProgress = 0; // Start with 0 charge
+                    }
+                }
+            });
 
-        // 4. Initial Card
-        const initial = this.deck.draw();
-        if (initial) {
-            this.deck.pushToDiscard(initial);
-            this.state.topCard = new CardSchema(initial.id, initial.suit, initial.rank);
+            // 3. Distribute
+            this.state.players.forEach((player, sessionId) => {
+                player.hand.clear(); // Reset hand just in case
+                for (let i = 0; i < GAME_CONSTANTS.INITIAL_HAND_SIZE; i++) {
+                    const card = this.deck.draw();
+                    if (card) player.hand.push(new CardSchema(card.id, card.suit, card.rank));
+                }
+            });
+
+            // 4. Initial Card
+            const initial = this.deck.draw();
+            if (initial) {
+                this.deck.pushToDiscard(initial);
+                this.state.topCard = new CardSchema(initial.id, initial.suit, initial.rank);
+            }
+            this.state.deckCount = this.deck.count;
+
+            // 5. First Turn
+            const firstPlayerId = Array.from(this.state.players.keys())[0];
+            this.state.currentTurn = firstPlayerId;
+
+            // Start turn for first player (triggers cooldown update for them)
+            this.skillManager.onTurnStart(firstPlayerId);
+
+            console.log("Game Started!");
+            this.broadcast("game_start", { initialCard: this.state.topCard });
+        } catch (e) {
+            console.error("Error in startGame:", e);
+            this.broadcast("announcement", "Game start failed: " + e);
+            this.state.status = "LOBBY"; // Revert to lobby
         }
-        this.state.deckCount = this.deck.count;
-
-        // 5. First Turn
-        const firstPlayerId = Array.from(this.state.players.keys())[0];
-        this.state.currentTurn = firstPlayerId;
-
-        // Start turn for first player (triggers cooldown update for them)
-        this.skillManager.onTurnStart(firstPlayerId);
-
-        console.log("Game Started!");
-        this.broadcast("game_start", { initialCard: this.state.topCard });
     }
 
     onJoin(client: Client, options: any) {
