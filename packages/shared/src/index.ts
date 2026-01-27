@@ -245,6 +245,9 @@ export const GAME_CONSTANTS = {
     BERSERKER_SELF_DAMAGE: 3, // 광전사: 자신 3장
     BERSERKER_ATTACK_DAMAGE: 5, // 광전사: 상대 5장
     SHAMAN_PENALTY: 3, // 주술사 거부 시 페널티: 3장
+
+    // 시스템 설정
+    ENABLE_BOTS: false, // AI 봇 활성화 여부 (디버깅용)
 } as const;
 
 // ============================================================================

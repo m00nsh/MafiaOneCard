@@ -42,7 +42,7 @@ export class MafiaRoom extends Room<GameStateSchema> {
             this.startTimer(10, () => this.handleTurnTimeout(playerId));
 
             // Bot Action
-            if (this.botManager.isBot(playerId)) {
+            if (GAME_CONSTANTS.ENABLE_BOTS && this.botManager.isBot(playerId)) {
                 this.clock.setTimeout(() => this.processBotTurn(playerId), 1000);
             }
         };
@@ -51,7 +51,8 @@ export class MafiaRoom extends Room<GameStateSchema> {
         this.setupMessageHandlers();
 
         // 4. Lobby Timer (Quick Mode)
-        if (options.mode === 'quick' || !options.mode) {
+        // Only if Bots are enabled. If disabled, wait for manual start or full room.
+        if (GAME_CONSTANTS.ENABLE_BOTS && (options.mode === 'quick' || !options.mode)) {
             this.startTimer(10, () => this.fillBotsAndStart());
         }
     }
