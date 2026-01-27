@@ -15,6 +15,7 @@ export class Deck {
         const ranks: CardRank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
         this.cards = [];
+        this.discardPile = []; // Reset discard pile to avoid duplicates on restart
 
         // 일반 카드 52장 생성
         for (const suit of suits) {
