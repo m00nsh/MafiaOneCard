@@ -39,6 +39,8 @@ React 18과 TypeScript를 기반으로 한 단일 페이지 애플리케이션(S
 
 ### 주요 의존성
 
+- **Colyseus.js 0.16.0**: 실시간 멀티플레이어 게임 서버 클라이언트
+- **@colyseus/schema 3.0.76**: Colyseus 상태 동기화 스키마
 - **Radix UI**: 접근성 있는 UI 컴포넌트 라이브러리 (다이얼로그, 드롭다운 등)
 - **Lucide React**: 아이콘 라이브러리
 - **Sonner**: 토스트 알림 라이브러리
@@ -67,22 +69,46 @@ apps/frontend/
 │   │   │   │   ├── LandscapeLayout.tsx  # [핵심] 가로형 레이아웃 래퍼
 │   │   │   │   ├── button.tsx
 │   │   │   │   ├── dialog.tsx
+│   │   │   │   ├── sonner.tsx    # 토스트 알림 컴포넌트
 │   │   │   │   └── ... (47개 UI 컴포넌트)
+│   │   │   ├── game/              # [신규] 게임 화면 관련 컴포넌트
+│   │   │   │   ├── OpponentHandVisual.tsx      # 상대방 손패 시각화
+│   │   │   │   ├── TurnDirectionIndicator.tsx  # 턴 방향 표시
+│   │   │   │   ├── OpponentProfile.tsx        # 상대방 프로필
+│   │   │   │   ├── ConnectionStatusIndicator.tsx  # 연결 상태 표시
+│   │   │   │   ├── LoadingOverlay.tsx         # 로딩 오버레이
+│   │   │   │   ├── LobbyUI.tsx               # 로비 UI
+│   │   │   │   ├── OpponentsArea.tsx         # 상대방 영역
+│   │   │   │   ├── CenterArea.tsx             # 중앙 영역 (덱 & 바닥 카드)
+│   │   │   │   ├── BottomArea.tsx            # 하단 영역 (내 정보, 손패, 스킬)
+│   │   │   │   ├── GameEndDialog.tsx         # 게임 종료 다이얼로그
+│   │   │   │   └── SuitSelectDialog.tsx      # 7 카드 문양 선택 다이얼로그
 │   │   │   ├── figma/
 │   │   │   │   └── ImageWithFallback.tsx  # 이미지 로딩 실패 시 폴백 처리
 │   │   │   ├── MainScreen.tsx             # 메인 타이틀 화면
-│   │   │   ├── GameModeScreen.tsx        # 게임 모드 선택 화면
-│   │   │   ├── PlayerCountScreen.tsx     # 플레이어 수 선택 화면
-│   │   │   ├── RoomScreen.tsx            # 대기방/로비 화면
-│   │   │   ├── LoadingScreen.tsx         # 로딩 화면
+│   │   │   ├── GameModeScreen.tsx          # 게임 모드 선택 화면
+│   │   │   ├── PlayerCountScreen.tsx      # 플레이어 수 선택 화면
+│   │   │   ├── RoomScreen.tsx             # 대기방/로비 화면
+│   │   │   ├── LoadingScreen.tsx          # 로딩 화면
 │   │   │   ├── CharacterSelectScreen.tsx  # 캐릭터 선택 화면
-│   │   │   ├── GameScreen.tsx            # [핵심] 인게임 화면
-│   │   │   ├── PlayingCard.tsx           # [핵심] 카드 렌더링 컴포넌트
-│   │   │   ├── PlayerInfo.tsx            # 플레이어 정보 표시 컴포넌트
-│   │   │   └── CardSpriteTestScreen.tsx  # 개발용 카드 스프라이트 테스트 화면
-│   │   └── utils/                 # 순수 게임 로직 및 유틸리티
-│   │       ├── gameLogic.ts      # [핵심] 덱 생성, 셔플, 카드 효과 정의
-│   │       └── nicknameGenerator.ts  # 랜덤 닉네임 생성기
+│   │   │   ├── GameScreen.tsx             # [핵심] 인게임 화면 (리팩토링됨)
+│   │   │   ├── PlayingCard.tsx            # [핵심] 카드 렌더링 컴포넌트
+│   │   │   ├── PlayerInfo.tsx             # 플레이어 정보 표시 컴포넌트
+│   │   │   └── CardSpriteTestScreen.tsx   # 개발용 카드 스프라이트 테스트 화면
+│   │   ├── hooks/                 # [신규] 커스텀 React 훅
+│   │   │   ├── useColyseusRoom.ts         # [핵심] Colyseus 서버 연결 관리
+│   │   │   ├── useToast.ts                # 토스트 알림 훅
+│   │   │   ├── useCardSorting.ts          # 카드 정렬 로직
+│   │   │   └── useLoadingDots.ts          # 로딩 애니메이션
+│   │   ├── utils/                 # 순수 게임 로직 및 유틸리티
+│   │   │   ├── gameLogic.ts              # [핵심] 덱 생성, 셔플, 카드 효과 정의
+│   │   │   ├── cardConverter.ts          # [신규] 백엔드/UI 카드 타입 변환
+│   │   │   ├── cardPlayabilityUtils.ts   # [신규] 카드 낼 수 있는지 판단
+│   │   │   ├── opponentUtils.ts          # [신규] Mock 상대방 생성
+│   │   │   ├── opponentTransformUtils.ts # [신규] 서버 플레이어 정보 변환
+│   │   │   └── nicknameGenerator.ts      # 랜덤 닉네임 생성기
+│   │   └── config/                # [신규] 설정 파일
+│   │       └── server.ts          # 서버 연결 설정 (Colyseus)
 │   └── styles/                    # 전역 스타일
 │       ├── index.css              # 메인 스타일 진입점
 │       ├── tailwind.css           # Tailwind CSS 설정
@@ -93,7 +119,7 @@ apps/frontend/
 ├── tsconfig.json                  # TypeScript 설정
 ├── vite.config.ts                 # Vite 빌드 설정
 ├── postcss.config.mjs             # PostCSS 설정
-└── README_ARCHITECTURE.md         # 이 문서
+└── README_FRONTEND.md             # 이 문서
 ```
 
 ---
@@ -127,14 +153,33 @@ apps/frontend/
 | `LandscapeLayout.tsx` | 레이아웃 래퍼 | 16:9 고정 해상도, 세로 모드 자동 회전, 스케일링 |
 | `PlayerInfo.tsx` | 플레이어 정보 | 플레이어 이름, 캐릭터, 카드 수 표시 |
 
+### 커스텀 훅 (Custom Hooks)
+
+| 파일 | 역할 | 주요 기능 |
+|------|------|----------|
+| `useColyseusRoom.ts` | 서버 연결 관리 | Colyseus 서버 연결, 상태 동기화, 메시지 송수신 |
+| `useToast.ts` | 토스트 알림 | 성공/에러/정보/경고 토스트 표시 |
+| `useCardSorting.ts` | 카드 정렬 | 손패 정렬 로직 (문양순/숫자순) |
+| `useLoadingDots.ts` | 로딩 애니메이션 | 서버 연결 중 '.' 애니메이션 (1→2→3→1 순환) |
+
 ### 유틸리티 함수
 
 | 파일 | 역할 | 주요 기능 |
 |------|------|----------|
 | `gameLogic.ts` | 게임 로직 | 덱 생성, 셔플, 카드 효과 정의, 카드 유효성 검사 |
+| `cardConverter.ts` | 타입 변환 | 백엔드 Card 타입 ↔ UI Card 타입 변환 |
+| `cardPlayabilityUtils.ts` | 카드 판단 | 카드가 낼 수 있는지 판단 (공격 스택, 문양 변경 고려) |
+| `opponentUtils.ts` | Mock 데이터 | Mock 상대방 플레이어 생성 |
+| `opponentTransformUtils.ts` | 데이터 변환 | 서버 플레이어 정보를 UI 형식으로 변환 |
 | `nicknameGenerator.ts` | 닉네임 생성 | 랜덤 닉네임 생성 (형용사 + 명사 조합) |
 
 ### 설정 파일
+
+| 파일 | 역할 | 주요 기능 |
+|------|------|----------|
+| `config/server.ts` | 서버 설정 | Colyseus 서버 URL, 방 이름, 디버그 모드 설정 |
+
+### 빌드 설정 파일
 
 | 파일 | 역할 | 주요 기능 |
 |------|------|----------|
@@ -178,63 +223,73 @@ interface GameState {
 
 **역할**: 게임 플레이의 핵심 화면으로, 카드 관리, 턴 진행, 상호작용을 담당합니다.
 
+**리팩토링**: 989줄에서 약 316줄로 축소되었으며, 여러 하위 컴포넌트로 분리되었습니다.
+
 #### 상태 관리
 
 | 상태 변수 | 타입 | 설명 |
 |-----------|------|------|
-| `myHand` | `Card[]` | 플레이어가 보유한 카드 리스트 |
+| `myHand` | `Card[]` | 플레이어가 보유한 카드 리스트 (서버에서 동기화) |
 | `sortMode` | `'none' \| 'suit' \| 'rank'` | 손패 정렬 방식 |
-| `turnPlayerId` | `string` | 현재 턴을 진행 중인 플레이어 ID |
-| `topCard` | `Card` | 버려진 카드 더미의 맨 위 카드 |
+| `topCard` | `Card` | 버려진 카드 더미의 맨 위 카드 (7 카드 문양 변경 반영) |
 | `deckCount` | `number` | 남은 덱 카드 수 |
 | `attackStack` | `number` | 누적된 공격 카드 수 |
 | `direction` | `'clockwise' \| 'counter-clockwise'` | 턴 진행 방향 |
 | `currentSkillCharge` | `number` | 스킬 게이지 (0~maxSkillCooldown) |
+| `gameState` | `GameStateSchema` | Colyseus 서버에서 동기화된 게임 상태 |
 
 #### 핵심 기능
 
-**1. 동적 카드 배치 (Dynamic Spacing)**
-```typescript
-const calculateOverlap = () => {
-  const CARD_WIDTH = 80;
-  const CONTAINER_MAX_WIDTH = 760;
-  const STANDARD_OVERLAP = 40;
-  
-  // 카드가 많아지면 겹침 정도를 자동 조정
-  // 최대 너비를 넘지 않도록 계산
-}
-```
+**1. Colyseus 서버 연동**
+- `useColyseusRoom` 훅을 통한 실시간 서버 연결
+- 게임 상태 자동 동기화 (카드, 턴, 공격 스택 등)
+- 서버로 카드 내기/뽑기 메시지 전송
+- 서버 응답 처리 및 에러 핸들링
+
+**2. 컴포넌트 분리 구조**
+- `LobbyUI`: 로비 상태 UI (준비 버튼, 플레이어 수 표시)
+- `OpponentsArea`: 상대방 플레이어 영역
+- `CenterArea`: 중앙 영역 (덱 & 바닥 카드)
+- `BottomArea`: 하단 영역 (내 정보, 손패, 스킬)
+- `GameEndDialog`: 게임 종료 통계 다이얼로그
+- `SuitSelectDialog`: 7 카드 문양 선택 다이얼로그
+- `LoadingOverlay`: 서버 연결 중 로딩 오버레이
+- `ConnectionStatusIndicator`: 연결 상태 표시
+
+**3. 동적 카드 배치 (Dynamic Spacing)**
+- `BottomArea` 컴포넌트 내부에서 처리
 - 손패의 장수에 따라 카드 간 겹침(`margin-left`)을 자동 계산
 - 최대 760px 영역 내에 모든 카드가 표시되도록 조정
 
-**2. 자동 정렬 (Auto-Sort)**
+**4. 자동 정렬 (Auto-Sort)**
+- `useCardSorting` 훅으로 분리
 - `Sort: Suit` (문양순): 문양 → 숫자 순서
 - `Sort: Rank` (숫자순): 숫자 → 문양 순서
 - 카드를 뽑거나 낼 때 즉시 재정렬
 
-**3. 카드 낼 수 있는 조건 (Playable Logic)**
-```typescript
-const isPlayable = isMyTurn && (
-  card.suit === topCard.suit || 
-  card.rank === topCard.rank || 
-  card.isJoker
-);
-```
+**5. 카드 낼 수 있는 조건 (Playable Logic)**
+- `cardPlayabilityUtils.ts`로 분리
+- 공격 스택 상황에 따른 공격 카드만 허용
+- 7 카드 문양 변경 시 선택한 문양 기준 판단
+- 조커 카드 처리 로직 포함
 
-**4. 스킬 시스템**
+**6. 스킬 시스템**
 - 쿨타임 게이지가 충전되면 버튼 활성화
 - 테스트용: 비활성화 상태 클릭 시 게이지 충전
 
-**5. 턴 방향 표시기**
-- `TurnDirectionIndicator`: 시계 방향/반시계 방향을 화살표로 표시
+**7. 턴 방향 표시기**
+- `TurnDirectionIndicator` 컴포넌트로 분리
+- 시계 방향/반시계 방향을 화살표로 표시
 - Q 카드 사용 시 방향 전환
 
-**6. 상대방 플레이어 배치**
+**8. 상대방 플레이어 배치**
+- `opponentTransformUtils.ts`로 분리
 - 인원수에 따라 동적 배치:
   - 2명: 왼쪽 상단 1명
   - 3명: 왼쪽 상단, 오른쪽 상단 각 1명
   - 4명: 왼쪽 2명, 오른쪽 1명
   - 5명: 왼쪽 2명, 오른쪽 2명
+- 시계 방향 턴 순서대로 배치
 
 ---
 
@@ -358,9 +413,115 @@ const getSpriteCoords = () => {
 
 ---
 
-## 6. 유틸리티 함수
+## 6. 커스텀 훅 및 유틸리티 함수
 
-### 6.1 gameLogic.ts
+### 6.1 useColyseusRoom.ts (서버 연결 관리)
+
+**역할**: Colyseus 서버와의 연결을 관리하고 게임 상태를 동기화합니다.
+
+**주요 기능**:
+- 서버 연결/해제
+- 게임 상태 자동 동기화 (`GameStateSchema`)
+- 메시지 송수신 (`sendMessage`, `onMessage`)
+- 연결 상태 관리 (`disconnected`, `connecting`, `connected`, `error`)
+
+**반환 값**:
+```typescript
+{
+  status: ConnectionStatus;
+  room: Room<GameStateSchema> | null;
+  sessionId: string | null;
+  error: Error | null;
+  connect: (options?: { name?: string }) => Promise<void>;
+  disconnect: () => void;
+  gameState: {
+    status: RoomStatus;
+    players: Map<string, PlayerInfo>;
+    myPlayer: PlayerInfo | null;
+    myHand: UICard[];
+    currentTurn: string | null;
+    direction: GameDirection;
+    attackStack: number;
+    topCard: UICard | null;
+    selectedSuit: CardSuit | null;
+    deckCount: number;
+    winnerId: string | null;
+  } | null;
+  sendMessage: <T>(type: string, message?: T) => void;
+  onMessage: <T>(type: string, callback: (message: T) => void) => void;
+}
+```
+
+**사용 예시**:
+```typescript
+const { status, gameState, connect, sendMessage, onMessage } = useColyseusRoom();
+
+useEffect(() => {
+  connect({ name: nickname });
+}, [nickname]);
+
+onMessage('card_play_response', (response) => {
+  if (response.success) {
+    console.log('카드 내기 성공');
+  }
+});
+```
+
+---
+
+### 6.2 useToast.ts (토스트 알림)
+
+**역할**: Sonner 라이브러리를 사용한 토스트 알림을 제공합니다.
+
+**주요 기능**:
+- `showSuccess`: 성공 메시지 (녹색)
+- `showError`: 에러 메시지 (빨간색)
+- `showInfo`: 정보 메시지 (파란색)
+- `showWarning`: 경고 메시지 (노란색)
+- `show`: 기본 메시지
+
+**사용 예시**:
+```typescript
+const { showError, showSuccess } = useToast();
+
+showError('서버 연결에 실패했습니다', {
+  description: '잠시 후 다시 시도해주세요.',
+});
+```
+
+---
+
+### 6.3 useCardSorting.ts (카드 정렬)
+
+**역할**: 손패 정렬 기능을 제공합니다.
+
+**주요 기능**:
+- 문양순 정렬 (Suit → Rank)
+- 숫자순 정렬 (Rank → Suit)
+- 정렬 모드 토글
+
+**반환 값**:
+```typescript
+{
+  sortMode: 'none' | 'suit' | 'rank';
+  sortedHand: Card[];
+  handleToggleSort: () => void;
+}
+```
+
+---
+
+### 6.4 useLoadingDots.ts (로딩 애니메이션)
+
+**역할**: 서버 연결 중 로딩 애니메이션을 제공합니다.
+
+**주요 기능**:
+- 0.333초마다 '.' 개수가 1개 → 2개 → 3개 → 1개로 순환
+- 연결 상태에 따라 자동 초기화
+
+---
+
+### 6.5 gameLogic.ts
 
 **타입 정의**:
 
@@ -425,7 +586,69 @@ interface GameState {
 
 ---
 
-### 6.2 nicknameGenerator.ts
+### 6.6 cardConverter.ts (타입 변환)
+
+**역할**: 백엔드/서버의 Card 타입과 프론트엔드 UI의 Card 타입을 변환합니다.
+
+**타입 정의**:
+```typescript
+// 백엔드 타입 (서버/공유 패키지)
+type CardSuit = 'SPADE' | 'HEART' | 'DIAMOND' | 'CLUB' | 'JOKER';
+type CardRank = 'A' | '2' | ... | 'K' | 'BLACK' | 'COLOR';
+
+// 프론트엔드 UI 타입
+type UISuit = 'spades' | 'hearts' | 'diamonds' | 'clubs' | 'joker';
+type UIRank = 'A' | '2' | ... | 'K' | 'JOKER_BW' | 'JOKER_COLOR';
+```
+
+**주요 함수**:
+- `suitToUI(suit: CardSuit): UISuit`: 서버 문양 → UI 문양
+- `rankToUI(rank: CardRank): UIRank`: 서버 숫자 → UI 숫자
+- `cardToUI(card: Card): UICard`: 서버 카드 → UI 카드
+- `cardFromUI(uiCard: UICard): Card`: UI 카드 → 서버 카드
+- `cardsToUI(cards: Card[]): UICard[]`: 카드 배열 변환
+- `cardsFromUI(uiCards: UICard[]): Card[]`: 카드 배열 변환
+
+---
+
+### 6.7 cardPlayabilityUtils.ts (카드 낼 수 있는지 판단)
+
+**역할**: 카드가 현재 상황에서 낼 수 있는지 판단합니다.
+
+**주요 로직**:
+- 공격 스택이 있을 때: 공격 카드(A, 2, 조커)만 허용
+- 공격 스택이 없을 때: 일반 규칙 (문양/숫자 일치 또는 조커)
+- 7 카드 문양 변경 시: 선택한 문양 기준 판단
+- 조커 카드 특수 규칙 처리
+
+**함수 시그니처**:
+```typescript
+function isCardPlayable(
+  card: Card,
+  topCard: Card,
+  attackStack: number,
+  selectedSuit: CardSuit | null,
+  isMyTurn: boolean,
+  isPlaying: boolean
+): boolean
+```
+
+---
+
+### 6.8 opponentUtils.ts & opponentTransformUtils.ts
+
+**opponentUtils.ts**: Mock 상대방 플레이어 생성
+- 플레이어 수에 따른 위치 배치 로직
+- Mock 데이터 생성
+
+**opponentTransformUtils.ts**: 서버 플레이어 정보 변환
+- 서버의 `Map<string, PlayerInfo>`를 UI의 `OpponentPlayer[]`로 변환
+- 시계 방향 턴 순서대로 배치
+- 캐릭터 이름 매핑
+
+---
+
+### 6.9 nicknameGenerator.ts
 
 **기능**: 랜덤 닉네임 생성
 
@@ -480,14 +703,30 @@ interface GameState {
 
 ### 현재 상태 관리 방식
 
-**로컬 상태 (Local State)**:
+**1. 로컬 상태 (Local State)**
 - `App.tsx`의 `useState`로 전역 상태 관리
 - 각 화면 컴포넌트는 props로 상태와 업데이트 함수를 받음
 
-**향후 확장 계획**:
-- Socket.IO를 통한 실시간 멀티플레이어 통신
-- 서버에서 게임 상태 동기화
-- `useContext` 또는 상태 관리 라이브러리 도입 검토
+**2. 서버 상태 동기화 (Colyseus)**
+- `useColyseusRoom` 훅을 통한 실시간 서버 연결
+- `GameStateSchema`를 통한 게임 상태 자동 동기화
+- 서버에서 변경된 상태가 자동으로 클라이언트에 반영
+
+**상태 동기화 흐름**:
+```
+서버 (MafiaRoom) 
+  → GameStateSchema 업데이트
+  → Colyseus 자동 동기화
+  → 클라이언트 (useColyseusRoom)
+  → gameState 업데이트
+  → React 리렌더링
+```
+
+**메시지 통신**:
+- 클라이언트 → 서버: `sendMessage(type, data)`
+  - 예: `sendMessage('card_play', { cardId, suit, rank })`
+- 서버 → 클라이언트: `onMessage(type, callback)`
+  - 예: `onMessage('card_play_response', (response) => {...})`
 
 ### 데이터 흐름 예시
 
@@ -518,13 +757,28 @@ interface GameState {
 6. **GameScreen** → 게임 플레이
    - `playerCount={3}`, `selectedCharacters={['merchant']}` props 전달
 
-### 상태 동기화 (향후)
+### 게임 상태 동기화 (현재 구현)
 
-현재는 클라이언트 내부 상태로만 동작하지만, 향후 Socket 통신을 통해:
+**서버에서 수신하는 상태**:
+- 플레이어 목록 및 정보 (닉네임, 캐릭터, 손패 수)
+- 현재 턴 플레이어
+- 게임 진행 방향 (시계/반시계)
+- 공격 스택
+- 바닥 카드 (topCard)
+- 선택된 문양 (7 카드 사용 시)
+- 덱 카드 수
+- 게임 상태 (LOBBY, PLAYING, ENDED)
+- 승자 ID
 
-1. **서버에서 게임 상태 수신**: 덱 분배, 턴 정보, 플레이어 액션
-2. **클라이언트에서 서버로 전송**: 카드 내기, 스킬 사용, 턴 종료
-3. **실시간 동기화**: 다른 플레이어의 액션을 즉시 반영
+**클라이언트에서 서버로 전송**:
+- `card_play`: 카드 내기
+- `draw_card`: 카드 뽑기
+- `ready`: 준비 상태 토글
+- 기타 게임 액션 (향후 확장)
+
+**실시간 동기화**:
+- 다른 플레이어의 액션이 즉시 반영됨
+- 턴 전환, 공격 스택 변경 등이 자동으로 UI에 업데이트
 
 ---
 
@@ -578,31 +832,61 @@ pnpm build
 
 ---
 
-## 11. 향후 개선 사항
+## 11. 리팩토링 및 아키텍처 개선
+
+### GameScreen.tsx 리팩토링 (완료)
+
+**목적**: 989줄의 거대한 컴포넌트를 여러 작은 컴포넌트로 분리하여 유지보수성 향상
+
+**분리된 컴포넌트**:
+- `components/game/` 폴더에 11개의 컴포넌트 생성
+- 각 컴포넌트가 단일 책임 원칙을 따름
+- 재사용 가능한 구조로 설계
+
+**분리된 로직**:
+- `hooks/` 폴더에 4개의 커스텀 훅 생성
+- `utils/` 폴더에 3개의 유틸리티 함수 추가
+
+**결과**:
+- `GameScreen.tsx`: 989줄 → 약 316줄 (약 68% 감소)
+- 코드 가독성 및 유지보수성 향상
+- 각 컴포넌트의 독립적 테스트 가능
+
+---
+
+## 12. 향후 개선 사항
 
 ### 예정된 기능
 
-1. **실시간 멀티플레이어**
-   - Socket.IO 통신 연동
-   - 서버와 게임 상태 동기화
-
-2. **게임 로직 완성**
-   - 카드 효과 구현 (공격, 방어, 스킵 등)
+1. **게임 로직 완성**
+   - 모든 카드 효과 구현 (공격, 방어, 스킵 등)
    - 스킬 시스템 완성
    - 승리 조건 처리
+   - 파산(Burst) 처리
+
+2. **AI 봇 시스템**
+   - 빠른 게임에서 인원 부족 시 AI 봇 자동 참여
+   - 단순한 행동 로직 (랜덤 카드 선택)
 
 3. **UI/UX 개선**
    - 카드 드래그 앤 드롭
    - 애니메이션 효과 강화
    - 사운드 효과 추가
+   - 게임 종료 통계 화면 개선
 
 4. **성능 최적화**
    - 카드 렌더링 최적화
    - 메모이제이션 적용
+   - 불필요한 리렌더링 방지
+
+5. **에러 처리 강화**
+   - 네트워크 오류 복구 로직
+   - 재연결 메커니즘
+   - 사용자 친화적 에러 메시지
 
 ---
 
-## 12. 참고 자료
+## 13. 참고 자료
 
 - [React 공식 문서](https://react.dev/)
 - [TypeScript 공식 문서](https://www.typescriptlang.org/)
@@ -612,5 +896,20 @@ pnpm build
 ---
 
 **문서 작성일**: 2025년 1월  
-**최종 수정일**: 2025년 1월  
-**버전**: 1.0.0
+**최종 수정일**: 2025년 1월 (리팩토링 반영)  
+**버전**: 2.0.0
+
+---
+
+## 변경 이력
+
+### v2.0.0 (2025년 1월)
+- GameScreen.tsx 리팩토링 (989줄 → 316줄)
+- `components/game/` 폴더에 11개 컴포넌트 분리
+- `hooks/` 폴더에 4개 커스텀 훅 추가
+- `utils/` 폴더에 3개 유틸리티 함수 추가
+- Colyseus 서버 연동 완료
+- 실시간 게임 상태 동기화 구현
+
+### v1.0.0 (2025년 1월)
+- 초기 문서 작성

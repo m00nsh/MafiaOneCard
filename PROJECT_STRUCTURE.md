@@ -29,7 +29,7 @@ MafiaOneCard/
 
 ### 2. Frontend (`apps/frontend`)
 - **기술 스택**: React 18, Vite, TypeScript, Tailwind CSS, Shadcn/UI, React DnD (드래그앤드롭)
-- **상세 문서**: 프론트엔드의 구조, 컴포넌트, 유틸리티 함수 등에 대한 상세한 설명은 [`apps/frontend/README_ARCHITECTURE.md`](./apps/frontend/README_ARCHITECTURE.md)를 참조하세요.
+- **상세 문서**: 프론트엔드의 구조, 컴포넌트, 유틸리티 함수 등에 대한 상세한 설명은 [`apps/frontend/README_FRONTEND.md`](./apps/frontend/README_FRONTEND.md)를 참조하세요.
 - **주요 폴더 및 파일**:
   - `src/app/App.tsx`: 애플리케이션의 메인 상태(`GameState`)와 라우팅(화면 전환)을 담당합니다.
   - `src/app/components/`:
