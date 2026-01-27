@@ -117,7 +117,33 @@ export class MafiaRoom extends Room<GameStateSchema> {
             return;
         }
 
-        // Force Draw 1 Card & Next Turn
+        // 7 카드 팝업이 열려있는 경우 (topCard가 7이고 selectedSuit이 비어있음)
+        // 랜덤 색깔 선택하고 카드 추가로 가져가지 않고 턴 넘어감
+        if (this.state.topCard.rank === '7' && this.state.selectedSuit === '') {
+            const suits: CardSuit[] = ['SPADE', 'HEART', 'DIAMOND', 'CLUB'];
+            const randomSuit = suits[Math.floor(Math.random() * suits.length)];
+            this.state.selectedSuit = randomSuit;
+            this.broadcast("announcement", `${player.nickname} timed out. Random suit selected: ${randomSuit}.`);
+            this.turnManager.nextTurn();
+            return;
+        }
+
+        // 공격 스택이 쌓인 경우: 스택만큼 카드 가져가기
+        if (this.state.attackStack > 0) {
+            if (this.deck.count === 0) this.deck.replenish();
+            const cardsToDraw = this.state.attackStack;
+            for (let i = 0; i < cardsToDraw; i++) {
+                const card = this.deck.draw();
+                if (card) player.hand.push(new CardSchema(card.id, card.suit, card.rank));
+            }
+            this.state.attackStack = 0;
+            this.state.deckCount = this.deck.count;
+            this.broadcast("announcement", `${player.nickname} timed out and drew ${cardsToDraw} card(s) due to attack stack.`);
+            this.turnManager.nextTurn();
+            return;
+        }
+
+        // 일반 경우: 카드 1장 가져가기
         if (this.deck.count === 0) this.deck.replenish();
         const card = this.deck.draw();
         if (card) player.hand.push(new CardSchema(card.id, card.suit, card.rank));
@@ -468,6 +494,9 @@ export class MafiaRoom extends Room<GameStateSchema> {
 
             // Start turn for first player (triggers cooldown update for them)
             this.skillManager.onTurnStart(firstPlayerId);
+
+            // 첫 번째 플레이어도 10초 타이머 시작
+            this.startTimer(10, () => this.handleTurnTimeout(firstPlayerId));
 
             console.log("Game Started!");
             this.broadcast("game_start", { initialCard: this.state.topCard });

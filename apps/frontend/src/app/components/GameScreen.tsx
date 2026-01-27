@@ -125,6 +125,16 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   // 카드 정렬
   const { sortMode, sortedHand, handleToggleSort } = useCardSorting(myHand);
 
+  // State (useEffect보다 먼저 선언)
+  const [showSuitDialog, setShowSuitDialog] = useState(false);
+  const [pendingCard, setPendingCard] = useState<{ card: Card; index: number } | null>(null);
+  const [showStatsDialog, setShowStatsDialog] = useState(false);
+  const [gameEndData, setGameEndData] = useState<{ myRank: number; winnerId: string; reason: string } | null>(null);
+  const [showSkillDialog, setShowSkillDialog] = useState(false);
+  
+  // 게임 종료 등수가 이미 설정되었는지 추적 (파산 시 한 번 설정되면 변경되지 않아야 함)
+  const gameEndReceivedRef = useRef(false);
+
   // 서버 응답 메시지 리스너
   useEffect(() => {
     if (!onMessage) return;
@@ -206,6 +216,15 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
         const message = typeof announcement === 'string' ? announcement : announcement.message;
         console.log('[GameScreen] 공지사항:', message);
       }
+      
+      // 타이머 만료 메시지 감지 시 팝업 닫기
+      const messageText = typeof announcement === 'string' ? announcement : announcement.message;
+      if (messageText && messageText.includes('timed out')) {
+        // 능력 사용 팝업 닫기
+        setShowSkillDialog(false);
+        // 7 카드 팝업 닫기 (백엔드에서 랜덤 색깔을 선택하므로 프론트엔드에서는 닫기만 함)
+        setShowSuitDialog(false);
+      }
     });
   }, [onMessage, sessionId, gameState?.players]);
   
@@ -243,16 +262,6 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   const opponents = useMemo(() => {
     return transformPlayersToOpponents(gameState?.players, myId, initialPlayerCount);
   }, [gameState?.players, myId, initialPlayerCount]);
-
-  // State
-  const [showSuitDialog, setShowSuitDialog] = useState(false);
-  const [pendingCard, setPendingCard] = useState<{ card: Card; index: number } | null>(null);
-  const [showStatsDialog, setShowStatsDialog] = useState(false);
-  const [gameEndData, setGameEndData] = useState<{ myRank: number; winnerId: string; reason: string } | null>(null);
-  const [showSkillDialog, setShowSkillDialog] = useState(false);
-  
-  // 게임 종료 등수가 이미 설정되었는지 추적 (파산 시 한 번 설정되면 변경되지 않아야 함)
-  const gameEndReceivedRef = useRef(false);
 
   // 스킬 관련 정보 (서버에서 가져옴)
   const myCharacterId = gameState?.myPlayer?.characterId || (selectedCharacters[0] as CharacterId) || null;
