@@ -64,11 +64,9 @@ export class MafiaRoom extends Room<GameStateSchema> {
         // 3. Message Handlers Registration (CRITICAL!)
         this.setupMessageHandlers();
 
-        // 4. Lobby Timer (Quick Mode)
-        // Only if Bots are enabled. If disabled, wait for manual start or full room.
-        if (GAME_CONSTANTS.ENABLE_BOTS && (options.mode === 'quick' || !options.mode)) {
-            this.startTimer(10, () => this.fillBotsAndStart());
-        }
+        // 4. Lobby Timer (Unified Queue - Step 1: 5s)
+        console.log("Room created. Waiting 5s (Step 1)...");
+        this.startTimer(5, () => this.checkLobbyTimerStep1());
     }
 
     private startTimer(seconds: number, callback: Function) {
@@ -146,30 +144,56 @@ export class MafiaRoom extends Room<GameStateSchema> {
         }
     }
 
-    private fillBotsAndStart() {
+    // Unified Queue Logic: Step 1 (5 seconds)
+    private checkLobbyTimerStep1() {
         if (this.state.status !== "LOBBY") return;
 
-        console.log("Lobby timeout -> Filling bots...");
-
         const currentCount = this.state.players.size;
-        const targetCount = GAME_CONSTANTS.MAX_PLAYERS;
+        console.log(`Lobby Step 1 (5s). Players: ${currentCount}`);
 
-        if (currentCount >= targetCount) {
+        // Condition A: >= 3 Players -> Start immediately
+        if (currentCount >= 3) {
+            this.broadcast("announcement", "Min players (3) gathered. Starting game!");
             this.startGame();
             return;
         }
 
-        const needed = targetCount - currentCount;
-        const existingIds = Array.from(this.state.players.keys());
+        // Condition B: < 3 Players -> Wait 5s more
+        this.broadcast("announcement", "Waiting for more players... (Extending 5s)");
+        this.startTimer(5, () => this.checkLobbyTimerStep2());
+    }
 
-        for (let i = 0; i < needed; i++) {
-            const { sessionId, player } = this.botManager.createBot(existingIds);
-            this.state.players.set(sessionId, player);
-            existingIds.push(sessionId);
+    // Unified Queue Logic: Step 2 (10 seconds total)
+    private checkLobbyTimerStep2() {
+        if (this.state.status !== "LOBBY") return;
+
+        const currentCount = this.state.players.size;
+        console.log(`Lobby Step 2 (10s). Players: ${currentCount}`);
+
+        // Condition A: >= 3 Players -> Start
+        if (currentCount >= 3) {
+            this.broadcast("announcement", "Starting game!");
+            this.startGame();
+            return;
         }
 
-        this.broadcast("announcement", `Added ${needed} AI bots.`);
-        this.startGame();
+        // Condition B: < 3 Players -> Fill Bots (if enabled)
+        if (GAME_CONSTANTS.ENABLE_BOTS) {
+            const needed = 3 - currentCount;
+            const existingIds = Array.from(this.state.players.keys());
+
+            for (let i = 0; i < needed; i++) {
+                const { sessionId, player } = this.botManager.createBot(existingIds);
+                this.state.players.set(sessionId, player);
+                existingIds.push(sessionId);
+            }
+            this.broadcast("announcement", `Added ${needed} AI bots to reach min players.`);
+            this.startGame();
+        } else {
+            // Wait longer (Loop Step 2)
+            this.broadcast("announcement", "Waiting for players...");
+            this.startTimer(5, () => this.checkLobbyTimerStep2());
+        }
     }
 
     private setupMessageHandlers() {
