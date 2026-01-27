@@ -187,7 +187,7 @@ export class MafiaRoom extends Room<GameStateSchema> {
         this.onMessage("use_skill", (client, message: UseSkillMessage) => {
             if (this.state.status !== "PLAYING") return;
 
-            const result = this.skillManager.useSkill(client.sessionId, message.skillId, message.targetPlayerId, message.selectedCardId);
+            const result = this.skillManager.useSkill(client.sessionId, message.skillId, message.targetPlayerId, message.selectedCardId, message.targetPlayerIds);
 
             if (!result.success) {
                 client.send("announcement", { message: result.error?.message || "Skill failed", type: "error" });
@@ -198,8 +198,9 @@ export class MafiaRoom extends Room<GameStateSchema> {
             this.broadcast("skill_used", {
                 playerId: client.sessionId,
                 skillId: message.skillId,
-                targetPlayerId: message.targetPlayerId
-            } as SkillUsedMessage); // Need to define this message type or cast
+                targetPlayerId: message.targetPlayerId,
+                targetPlayerIds: message.targetPlayerIds // Broadcast list too
+            } as SkillUsedMessage);
 
             if (result.message) {
                 this.broadcast("announcement", `${client.sessionId} used ${message.skillId}: ${result.message}`);

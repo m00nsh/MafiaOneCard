@@ -20,7 +20,7 @@ export class SkillManager {
     ) { }
 
     // 스킬 사용 메인 진입점
-    useSkill(sessionId: string, skillId: CharacterId, targetId?: string, selectedCardId?: string): SkillResult {
+    useSkill(sessionId: string, skillId: CharacterId, targetId?: string, selectedCardId?: string, targetIds?: string[]): SkillResult {
         const player = this.state.players.get(sessionId);
         if (!player) return { success: false, error: { code: ErrorCode.INTERNAL_SERVER_ERROR, message: "Player not found" } };
 
@@ -29,7 +29,7 @@ export class SkillManager {
         if (!validation.success) return validation;
 
         // 2. 스킬별 로직 실행
-        return this.executeSkill(sessionId, player, skillId, targetId, selectedCardId);
+        return this.executeSkill(sessionId, player, skillId, targetId, selectedCardId, targetIds);
     }
 
     private validateSkillUse(sessionId: string, player: PlayerSchema, skillId: CharacterId): SkillResult {
@@ -74,7 +74,8 @@ export class SkillManager {
         player: PlayerSchema,
         skillId: CharacterId,
         targetId?: string,
-        selectedCardId?: string
+        selectedCardId?: string,
+        targetIds?: string[]
     ): SkillResult {
 
         // 결과 모음 (승리/파산 체크용)
@@ -175,7 +176,7 @@ export class SkillManager {
                 // 재귀 호출로 효과 실행
                 // 주의: 소환사 본인의 횟수 차감은 이미 validate에서 체크했으나, executeSkill 내에서는 차감 로직 별도 필요
                 // 여기서는 '효과'만 빌려옴.
-                const subResult = this.executeSkill(sessionId, player, copiedSkill, targetId /* Some skills need target */, selectedCardId);
+                const subResult = this.executeSkill(sessionId, player, copiedSkill, targetId /* Some skills need target */, selectedCardId, targetIds);
                 if (!subResult.success) return subResult;
 
                 // 성공 시 '타겟'의 쿨타임 리셋 (소환사 룰: 선택된 플레이어는 스킬 사용한걸로 간주)
@@ -201,31 +202,41 @@ export class SkillManager {
                 break;
 
             case 'berserker': // 광전사: 나 1장, 타겟들 3장
-                // 타겟이 복수여야 함. targetId 인자를 배열로 받거나 comma separated string?
-                // 일단 단순화를 위해 구현: (Client sends targetId array logic needed, currently taking 1 targetId)
-                // 임시: targetId 가 하나만 오면 그 사람 + 랜덤 1명? 
-                // 혹은 Rulebook says "Select 2 targets".
-                // For now, let's assume implementation detail handles logic.
-                // -> Simplified: Self draw 1. (MVP)
+                // 1. 타겟 검증 (2명 필, 단 남은 적이 1명이면 1명 가능)
+                const opponentCount = this.state.players.size - 1; // 나 제외
+                const finalTargets = targetIds ? targetIds : (targetId ? [targetId] : []);
+
+                // 중복 제거 (Set)
+                const uniqueTargets = new Set(finalTargets);
+
+                if (opponentCount >= 2) {
+                    if (uniqueTargets.size < 2) return { success: false, error: { message: "Must select 2 targets" } };
+                } else if (opponentCount === 1) {
+                    if (uniqueTargets.size < 1) return { success: false, error: { message: "Must select 1 target" } };
+                }
+
+                // 2. Self Draw 1
                 if (this.deck.count === 0) this.deck.replenish();
                 const c = this.deck.draw();
                 if (c) player.hand.push(c as any);
 
-                // Target logic placeholder (needs protocol update for multiple targets)
-                if (targetId) {
-                    const t = this.state.players.get(targetId);
-                    if (t) {
-                        for (let i = 0; i < 3; i++) {
-                            if (this.deck.count === 0) this.deck.replenish();
-                            const c2 = this.deck.draw();
-                            if (c2) t.hand.push(c2 as any);
+                // 3. Targets Draw 3 each
+                if (uniqueTargets.size > 0) {
+                    uniqueTargets.forEach(tid => {
+                        const t = this.state.players.get(tid);
+                        if (t && tid !== sessionId) { // 본인 제외 안전장치
+                            for (let i = 0; i < 3; i++) {
+                                if (this.deck.count === 0) this.deck.replenish();
+                                const c2 = this.deck.draw();
+                                if (c2) t.hand.push(c2 as any);
+                            }
+                            affectedPlayers.add(tid);
                         }
-                        affectedPlayers.add(targetId);
-                    }
+                    });
+                    result.message = `Berserker rage on ${uniqueTargets.size} targets!`;
                 }
 
                 affectedPlayers.add(sessionId);
-                result.message = "Berserker rage!";
                 break;
         }
 
