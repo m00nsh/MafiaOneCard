@@ -100,10 +100,13 @@ export default function SkillDialog({
     // 모든 입력 완료 시 스킬 사용 (도둑/예언자/탱커는 추가 입력 없이 즉시 사용)
     const message: UseSkillMessage = {
       skillId: characterId,
-      targetPlayerId: requiredInputs.needsTarget && selectedPlayerIds.length > 0
-        ? selectedPlayerIds.length === 1
-          ? selectedPlayerIds[0]
-          : undefined // 광전사는 여러 명 선택하지만 백엔드에서 처리
+      // 단일 타겟: 1명만 선택된 경우
+      targetPlayerId: requiredInputs.needsTarget && selectedPlayerIds.length === 1
+        ? selectedPlayerIds[0]
+        : undefined,
+      // 다중 타겟: 2명 이상 선택된 경우 (광전사 등)
+      targetPlayerIds: requiredInputs.needsTarget && selectedPlayerIds.length >= 1
+        ? selectedPlayerIds
         : undefined,
       selectedCardId: requiredInputs.needsCard ? selectedCardId || undefined : undefined,
     };
@@ -127,6 +130,18 @@ export default function SkillDialog({
         skillId: characterId,
         selectedCardId,
         targetPlayerId: playerIds[0],
+      });
+      onOpenChange(false);
+      return;
+    }
+
+    // 그 외 타겟 필요 스킬: 플레이어 선택 후 자동 스킬 사용
+    // (주술사, 소환사, 암살자, 광전사)
+    if (characterId && playerIds.length >= requiredInputs.targetCount) {
+      onConfirm({
+        skillId: characterId,
+        targetPlayerId: playerIds.length === 1 ? playerIds[0] : undefined,
+        targetPlayerIds: playerIds,
       });
       onOpenChange(false);
     }

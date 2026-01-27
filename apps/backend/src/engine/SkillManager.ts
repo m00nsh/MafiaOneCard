@@ -237,7 +237,10 @@ export class SkillManager {
                             for (let i = 0; i < 3; i++) {
                                 if (this.deck.count === 0) this.deck.replenish();
                                 const c2 = this.deck.draw();
-                                if (c2) t.hand.push(c2 as any);
+                                if (c2) {
+                                    const cardSchema = new CardSchema(c2.id, c2.suit, c2.rank);
+                                    t.hand.push(cardSchema);
+                                }
                             }
                             affectedPlayers.add(tid);
                         }

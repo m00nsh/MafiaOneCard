@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
 import { Card } from '@/app/utils/gameLogic';
 import { useColyseusRoom } from '@/app/hooks/useColyseusRoom';
@@ -148,6 +148,12 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
       console.log('[GameScreen] 게임 종료:', message);
       console.log('[GameScreen] 내 sessionId:', sessionId, 'stats:', message.stats);
       
+      // 이미 게임 종료 정보를 받았으면 무시 (파산 후 브로드캐스트 메시지 무시)
+      if (gameEndReceivedRef.current) {
+        console.log('[GameScreen] 이미 게임 종료 정보를 받음, 무시');
+        return;
+      }
+      
       let myRank = 0;
       
       // 형식 1: 탈락 시 - stats: { rank, handCount }
@@ -168,6 +174,9 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
           myRank = message.stats[firstKey].rank;
         }
       }
+      
+      // 등수가 설정되었으면 ref를 true로 설정
+      gameEndReceivedRef.current = true;
       
       setGameEndData({
         myRank,
@@ -236,6 +245,9 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
   const [showStatsDialog, setShowStatsDialog] = useState(false);
   const [gameEndData, setGameEndData] = useState<{ myRank: number; winnerId: string; reason: string } | null>(null);
   const [showSkillDialog, setShowSkillDialog] = useState(false);
+  
+  // 게임 종료 등수가 이미 설정되었는지 추적 (파산 시 한 번 설정되면 변경되지 않아야 함)
+  const gameEndReceivedRef = useRef(false);
 
   // 스킬 관련 정보 (서버에서 가져옴)
   const myCharacterId = gameState?.myPlayer?.characterId || (selectedCharacters[0] as CharacterId) || null;
