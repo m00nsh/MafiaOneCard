@@ -121,28 +121,54 @@ export class SkillManager {
                 }
                 break;
 
-            case 'thief': // 도둑: 이전/다음 플레이어에게서 1장씩 강탈
+            case 'thief': // 도둑: 이전/다음 플레이어의 패에서 카드 한 장씩 랜덤으로 뽑아 주고 받음
+                // 현재 진행 방향 기준으로 이전/다음 플레이어 찾기
                 const playerIds = Array.from(this.state.players.keys());
                 const myIndex = playerIds.indexOf(sessionId);
-                const prevIndex = (myIndex - 1 + playerIds.length) % playerIds.length;
-                const nextIndex = (myIndex + 1) % playerIds.length;
+                
+                // 방향에 따라 이전/다음 인덱스 계산
+                let prevIndex: number;
+                let nextIndex: number;
+                if (this.state.direction === 'clockwise') {
+                    // 시계 방향: 이전 = 왼쪽, 다음 = 오른쪽
+                    prevIndex = (myIndex - 1 + playerIds.length) % playerIds.length;
+                    nextIndex = (myIndex + 1) % playerIds.length;
+                } else {
+                    // 반시계 방향: 이전 = 오른쪽, 다음 = 왼쪽
+                    prevIndex = (myIndex + 1) % playerIds.length;
+                    nextIndex = (myIndex - 1 + playerIds.length) % playerIds.length;
+                }
 
                 const prevId = playerIds[prevIndex];
                 const nextId = playerIds[nextIndex];
 
-                // 자신 제외 (2인 플레이 시 서로 뺏기?)
-                if (prevId === sessionId) break; // 혼자일때
+                // 자신 제외 (2인 플레이 시 서로 교환)
+                if (prevId === sessionId || nextId === sessionId) break; // 혼자일때
 
-                [prevId, nextId].forEach(pid => {
-                    const p = this.state.players.get(pid);
-                    if (p && p.hand.length > 0) {
-                        const randIdx = Math.floor(Math.random() * p.hand.length);
-                        const [stolen] = p.hand.splice(randIdx, 1);
-                        player.hand.push(stolen);
-                        affectedPlayers.add(pid);
-                    }
-                });
-                result.message = "Stole cards from neighbors.";
+                const prevPlayer = this.state.players.get(prevId);
+                const nextPlayer = this.state.players.get(nextId);
+
+                // 이전 플레이어와 다음 플레이어가 모두 존재하고 카드를 가지고 있는 경우에만 교환
+                if (prevPlayer && nextPlayer && prevPlayer.hand.length > 0 && nextPlayer.hand.length > 0) {
+                    // 이전 플레이어의 카드 1장 랜덤 선택
+                    const prevRandIdx = Math.floor(Math.random() * prevPlayer.hand.length);
+                    const [prevCard] = prevPlayer.hand.splice(prevRandIdx, 1);
+                    
+                    // 다음 플레이어의 카드 1장 랜덤 선택
+                    const nextRandIdx = Math.floor(Math.random() * nextPlayer.hand.length);
+                    const [nextCard] = nextPlayer.hand.splice(nextRandIdx, 1);
+                    
+                    // 교환: 이전 플레이어의 카드를 다음 플레이어에게, 다음 플레이어의 카드를 이전 플레이어에게
+                    prevPlayer.hand.push(nextCard);
+                    nextPlayer.hand.push(prevCard);
+                    
+                    affectedPlayers.add(prevId);
+                    affectedPlayers.add(nextId);
+                    result.message = "Swapped cards between neighbors.";
+                } else {
+                    // 한 명이라도 카드가 없으면 교환 불가
+                    result.message = "Cannot swap: one or both neighbors have no cards.";
+                }
                 break;
 
             case 'prophet': // 예언자: 다음 플레이어 카드 3장 확인 (통신만 하면 됨, 상태 변경 없음)
