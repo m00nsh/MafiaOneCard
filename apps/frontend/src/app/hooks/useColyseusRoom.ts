@@ -36,6 +36,7 @@ export interface UseColyseusRoomReturn {
     selectedSuit: CardSuit | null;
     deckCount: number;
     winnerId: string | null;
+    timerEndTime: number;
   } | null;
 
   // 메시지 전송 함수
@@ -200,6 +201,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
         const selectedSuit = state.selectedSuit ? (state.selectedSuit as CardSuit) : null;
         const deckCount = state.deckCount || 0;
         const winnerId = state.winnerId || null;
+        const timerEndTime = state.timerEndTime || 0;
 
         const newGameState = {
           status: state.status as RoomStatus,
@@ -213,6 +215,7 @@ export function useColyseusRoom(): UseColyseusRoomReturn {
           selectedSuit,
           deckCount,
           winnerId,
+          timerEndTime,
         };
 
         if (DEBUG) {

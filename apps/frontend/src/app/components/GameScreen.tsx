@@ -13,6 +13,7 @@ import { transformPlayersToOpponents } from '@/app/utils/opponentTransformUtils'
 
 // Game UI Components
 import TurnDirectionIndicator from '@/app/components/game/TurnDirectionIndicator';
+import TurnTimer from '@/app/components/game/TurnTimer';
 import ConnectionStatusIndicator from '@/app/components/game/ConnectionStatusIndicator';
 import LoadingOverlay from '@/app/components/game/LoadingOverlay';
 import LobbyUI from '@/app/components/game/LobbyUI';
@@ -312,6 +313,12 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
       >
         <ConnectionStatusIndicator status={status} sessionId={sessionId} error={error} />
         <TurnDirectionIndicator direction={direction} />
+        {isPlaying && (
+          <TurnTimer 
+            timerEndTime={gameState?.timerEndTime || 0} 
+            isMyTurn={isMyTurn}
+          />
+        )}
 
         {isLobby && (
           <LobbyUI

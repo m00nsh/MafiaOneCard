@@ -199,6 +199,12 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 });
                 this.broadcast("announcement", `${client.sessionId} played a card!`);
 
+                // 타이머 재시작 (K 카드로 턴이 넘어가지 않아도 타이머는 재시작)
+                // nextTurn()이 호출되지 않았을 수 있으므로 명시적으로 타이머 재시작
+                if (this.state.status === "PLAYING" && this.state.currentTurn === client.sessionId) {
+                    this.startTimer(10, () => this.handleTurnTimeout(client.sessionId));
+                }
+
                 // Check Game End 
                 if (result.isGameEnded) {
                     this.handleGameEnd(this.state.winnerId);
