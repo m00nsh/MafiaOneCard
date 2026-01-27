@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
 
@@ -17,56 +17,56 @@ export const characters: Character[] = [
     name: '잡상인',
     description: '내 패 중 한 장을 선택해 특정 플레이어에게 강제로 넘김',
     cooldown: '3턴',
-    imageUrl: 'https://images.unsplash.com/photo-1606301267109-4c3fa7d41615?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtZXJjaGFudCUyMHRyYWRlcnxlbnwxfHx8fDE3NjkxNjQ3NDV8MA&ixlib=rb-4.1.0&q=80&w=1080',
+    imageUrl: '/merchant.png',
   },
   {
     id: 'tank',
     name: '탱커',
     description: '나에게 들어온 공격 카드의 누적치를 50% 감쇄 (소수점 올림)',
     cooldown: '4턴',
-    imageUrl: 'https://images.unsplash.com/photo-1719421976933-6dee24e4b482?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0YW5rJTIwd2FycmlvciUyMGFybW9yfGVufDF8fHx8MTc2OTE2NDc0NXww&ixlib=rb-4.1.0&q=80&w=1080',
+    imageUrl: '/tank.png',
   },
   {
     id: 'thief',
     name: '도둑',
     description: '이전 턴과 다음 턴 플레이어의 패에서 각각 1장씩 무작위로 가져와 섞음',
     cooldown: '3턴',
-    imageUrl: 'https://images.unsplash.com/photo-1705105238704-a62b18e1b985?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0aGllZiUyMHJvZ3VlJTIwbmluamF8ZW58MXx8fHwxNzY5MTY0NzQ1fDA&ixlib=rb-4.1.0&q=80&w=1080',
+    imageUrl: '/thief.png',
   },
   {
     id: 'prophet',
     name: '예언자',
     description: '이전 플레이어가 덱에서 가져간 카드 또는 보유한 패를 확인',
     cooldown: '3턴',
-    imageUrl: 'https://images.unsplash.com/photo-1709390658366-53f042e66fee?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9waGV0JTIwb3JhY2xlJTIwbXlzdGljfGVufDF8fHx8MTc2OTE2NDc0Nnww&ixlib=rb-4.1.0&q=80&w=1080',
+    imageUrl: '/prophet.png',
   },
   {
     id: 'shaman',
     name: '주술사',
     description: '특정 플레이어를 지목해 현재 턴에 스킬을 강제로 사용시키기 (거부 시 카드 3장)',
     cooldown: '3턴',
-    imageUrl: 'https://images.unsplash.com/photo-1603669388518-beee44ac92de?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzaGFtYW4lMjB3aXRjaCUyMG1hZ2ljfGVufDF8fHx8MTc2OTE2NDc0Nnww&ixlib=rb-4.1.0&q=80&w=1080',
+    imageUrl: '/shaman.png',
   },
   {
     id: 'summoner',
     name: '소환사',
     description: '다른 플레이어의 스킬을 뺏어서 사용',
     cooldown: '1회 사용',
-    imageUrl: 'https://images.unsplash.com/photo-1654663477425-acf704a970d7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdW1tb25lciUyMG1hZ2UlMjB3aXphcmR8ZW58MXx8fHwxNzY5MTY0NzQ2fDA&ixlib=rb-4.1.0&q=80&w=1080',
+    imageUrl: '/summoner.png',
   },
   {
     id: 'assassin',
     name: '암살자',
     description: '특정 플레이어 1명을 지목해 카드 3장 부여',
     cooldown: '5턴',
-    imageUrl: 'https://images.unsplash.com/photo-1651335944644-33c89ed94cc9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhc3Nhc3NpbiUyMHNoYWRvd3xlbnwxfHx8fDE3NjkxNjQ3NDd8MA&ixlib=rb-4.1.0&q=80&w=1080',
+    imageUrl: '/assassin.png',
   },
   {
     id: 'berserker',
     name: '광전사',
     description: '자신이 카드 3장을 먹고 5장 먹이는 공격 시전하기',
     cooldown: '2회 사용',
-    imageUrl: 'https://images.unsplash.com/photo-1613477757024-fb6d3fd3c0a9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx3YXJyaW9yJTIwYmF0dGxlfGVufDF8fHx8MTc2OTE2NDc1NHww&ixlib=rb-4.1.0&q=80&w=1080',
+    imageUrl: '/berserker.png',
   },
 ];
 
