@@ -79,6 +79,7 @@ export function ColyseusProvider({ children }: ColyseusProviderProps) {
   const connect = useCallback(async (options?: { name?: string; characterId?: CharacterId; mode?: 'quick' | 'custom'; roomCode?: string; isHost?: boolean; maxPlayers?: number }) => {
     console.log('[ColyseusProvider.connect] 방 연결 시도 시작');
     console.log('[ColyseusProvider.connect] Options:', JSON.stringify(options));
+    console.log('[ColyseusProvider.connect] 현재 상태:', status);
     
     if (!clientRef.current) {
       const error = new Error('Colyseus 클라이언트가 초기화되지 않았습니다.');
@@ -88,9 +89,15 @@ export function ColyseusProvider({ children }: ColyseusProviderProps) {
       return;
     }
 
-    // 이미 연결되어 있으면 무시
-    if (roomRef.current && status === 'connected') {
-      console.log('[ColyseusProvider.connect] 이미 연결되어 있음');
+    // 이미 연결되어 있거나 연결 중이면 무시 (중복 연결 방지)
+    if (roomRef.current && (status === 'connected' || status === 'connecting')) {
+      console.log('[ColyseusProvider.connect] 이미 연결되어 있거나 연결 중. 무시.');
+      return;
+    }
+    
+    // status가 connecting인데 roomRef.current가 없는 경우도 방지
+    if (status === 'connecting') {
+      console.log('[ColyseusProvider.connect] 연결 진행 중. 중복 연결 시도 무시.');
       return;
     }
 

@@ -76,9 +76,10 @@ export const characters: Character[] = [
 interface CharacterSelectScreenProps {
   onComplete: (selectedCharacters: string[]) => void;
   onBack?: () => void;
+  gameMode?: 'quick' | 'custom';
 }
 
-export default function CharacterSelectScreen({ onComplete, onBack }: CharacterSelectScreenProps) {
+export default function CharacterSelectScreen({ onComplete, onBack, gameMode }: CharacterSelectScreenProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
   const { sendMessage, status } = useColyseus();
@@ -105,7 +106,14 @@ export default function CharacterSelectScreen({ onComplete, onBack }: CharacterS
       return;
     }
 
-    // 서버에 캐릭터 선택 메시지 전송
+    // 빠른 게임: 서버 연결 없이 캐릭터만 선택 (LoadingScreen에서 서버 연결)
+    if (gameMode === 'quick') {
+      console.log('[CharacterSelectScreen] 빠른 게임 모드: 캐릭터 선택 완료 (서버 연결은 LoadingScreen에서)');
+      onComplete([selectedCharacterId]);
+      return;
+    }
+
+    // 커스텀 게임: 서버에 캐릭터 선택 메시지 전송
     if (sendMessage && status === 'connected') {
       console.log('[CharacterSelectScreen] 캐릭터 선택 전송:', selectedCharacterId);
       sendMessage('select_character', { characterId: selectedCharacterId as CharacterId });

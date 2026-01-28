@@ -465,17 +465,11 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
           />
         )}
 
-        {/* 빠른 게임 모드에서는 로비 UI를 표시하지 않음 (자동 시작) */}
-        {isLobby && gameMode !== 'quick' && (
-          <LobbyUI
-            currentPlayerCount={currentPlayerCount}
-            allPlayersReady={allPlayersReady}
-            readyCount={Array.from(gameState?.players?.values() || []).filter(p => p.isReady).length}
-            myReadyState={myReadyState}
-            canStartGame={canStartGame}
-            onToggleReady={handleToggleReady}
-          />
-        )}
+        {/* 
+          로비 UI는 GameScreen에서 표시하지 않음:
+          - 빠른 게임: 자동 시작
+          - 커스텀 게임: RoomScreen에서 이미 준비 완료 후 게임 시작
+        */}
 
         <OpponentsArea opponents={opponents} currentTurn={currentTurn} />
 

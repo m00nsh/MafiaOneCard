@@ -187,12 +187,35 @@ export class MafiaRoom extends Room<GameStateSchema> {
             if (this.deck.count === 0) this.deck.replenish();
             const cardsToDraw = this.state.attackStack;
             for (let i = 0; i < cardsToDraw; i++) {
+                if (this.deck.count === 0) this.deck.replenish();
                 const card = this.deck.draw();
                 if (card) player.hand.push(new CardSchema(card.id, card.suit, card.rank));
             }
             this.state.attackStack = 0;
             this.state.deckCount = this.deck.count;
             this.broadcast("announcement", `${player.nickname} timed out and drew ${cardsToDraw} card(s) due to attack stack.`);
+            
+            // 파산 체크 (20장 초과)
+            if (player.hand.length > GAME_CONSTANTS.MAX_HAND_SIZE) {
+                const client = Array.from(this.clients.values()).find(c => c.sessionId === playerId);
+                if (client) {
+                    this.handlePlayerElimination(client, 'burst');
+                    return;
+                } else if (this.botManager.isBot(playerId)) {
+                    // 봇 파산 처리
+                    this.broadcast("announcement", `${player.nickname} burst with ${player.hand.length} cards!`);
+                    this.state.players.delete(playerId);
+                    
+                    if (this.state.players.size <= 1) {
+                        const winnerId = Array.from(this.state.players.keys())[0] || '';
+                        this.state.winnerId = winnerId;
+                        this.state.status = "ENDED";
+                        this.handleGameEnd(winnerId);
+                        return;
+                    }
+                }
+            }
+            
             this.turnManager.nextTurn();
             return;
         }
@@ -214,6 +237,28 @@ export class MafiaRoom extends Room<GameStateSchema> {
         this.state.deckCount = this.deck.count;
         this.broadcast("announcement", `${player.nickname} timed out and drew a card.`);
 
+        // 파산 체크 (20장 초과)
+        if (player.hand.length > GAME_CONSTANTS.MAX_HAND_SIZE) {
+            const client = Array.from(this.clients.values()).find(c => c.sessionId === playerId);
+            if (client) {
+                this.handlePlayerElimination(client, 'burst');
+                return; // 파산 시 턴 넘기기 불필요
+            } else if (this.botManager.isBot(playerId)) {
+                // 봇 파산 처리
+                this.broadcast("announcement", `${player.nickname} burst with ${player.hand.length} cards!`);
+                this.state.players.delete(playerId);
+                
+                // 남은 플레이어 체크
+                if (this.state.players.size <= 1) {
+                    const winnerId = Array.from(this.state.players.keys())[0] || '';
+                    this.state.winnerId = winnerId;
+                    this.state.status = "ENDED";
+                    this.handleGameEnd(winnerId);
+                    return;
+                }
+            }
+        }
+
         this.turnManager.nextTurn();
     }
 
@@ -229,37 +274,50 @@ export class MafiaRoom extends Room<GameStateSchema> {
                 this.state.deckCount = this.deck.count;
                 this.broadcast("card_play_response", { success: true, newTopCard: this.state.topCard });
                 this.broadcast("announcement", `${botId} played a card.`);
-                if (result.isGameEnded) this.handleGameEnd(this.state.winnerId);
+                
+                if (result.isGameEnded) {
+                    this.handleGameEnd(this.state.winnerId);
+                    return;
+                }
+                
+                // K 카드로 인해 턴이 유지되는 경우, 봇이 다시 행동해야 함
+                if (this.state.currentTurn === botId && this.state.status === "PLAYING") {
+                    console.log(`[processBotTurn] Bot ${botId} still has turn (K card), processing again...`);
+                    this.clock.setTimeout(() => this.processBotTurn(botId), 1000);
+                }
             } else {
+                // 카드 내기 실패 시 카드 뽑기로 전환
                 this.handleTurnTimeout(botId);
             }
         } else {
+            // draw 액션 또는 다른 경우
             this.handleTurnTimeout(botId);
         }
     }
 
     // Unified Queue Logic: Step 1 (5 seconds)
+    // 5초 타이머가 만료된 후 호출됨
     private checkLobbyTimerStep1() {
         if (this.state.status !== "LOBBY") return;
 
         const currentCount = this.state.players.size;
         console.log(`Lobby Step 1 (5s). Players: ${currentCount}`);
 
-        // Condition A: Max players (5) reached -> Start immediately
+        // Condition A: Max players (5) reached -> Start immediately (이미 onJoin에서 처리되지만 안전장치)
         if (currentCount >= GAME_CONSTANTS.MAX_PLAYERS) {
             this.broadcast("announcement", `Max players (${GAME_CONSTANTS.MAX_PLAYERS}) gathered. Starting game!`);
             this.startGame();
             return;
         }
 
-        // Condition B: >= 3 Players -> Start immediately
+        // Condition B: >= 3 Players -> Start game (5초 대기 후 시작)
         if (currentCount >= 3) {
-            this.broadcast("announcement", "Min players (3) gathered. Starting game!");
+            this.broadcast("announcement", "Starting game with current players!");
             this.startGame();
             return;
         }
 
-        // Condition C: < 3 Players -> Wait 5s more
+        // Condition C: < 3 Players -> Wait 5s more for bots
         this.broadcast("announcement", "Waiting for more players... (Extending 5s)");
         this.startTimer(5, () => this.checkLobbyTimerStep2());
     }
@@ -719,10 +777,19 @@ export class MafiaRoom extends Room<GameStateSchema> {
 
     private startGame() {
         try {
+            // 이미 게임이 진행 중이면 무시 (중복 호출 방지)
+            if (this.state.status === "PLAYING") {
+                console.log(`[MafiaRoom.startGame] 게임이 이미 진행 중. 중복 호출 무시.`);
+                return;
+            }
+            
             console.log(`[MafiaRoom.startGame] 게임 시작 함수 호출`);
             console.log(`[MafiaRoom.startGame] 현재 플레이어 수: ${this.state.players.size}`);
             console.log(`[MafiaRoom.startGame] 게임 모드: ${this.gameMode}`);
             console.log(`[MafiaRoom.startGame] 방 코드: ${this.roomCode || 'none'}`);
+            
+            // 타이머 정리 (혹시 남아있는 로비 타이머가 있을 경우)
+            this.clearTimer();
             
             this.state.status = "PLAYING";
             console.log(`[MafiaRoom.startGame] 게임 상태 변경: LOBBY -> PLAYING`);

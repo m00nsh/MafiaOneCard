@@ -147,10 +147,16 @@ export default function App() {
 
         {gameState.screen === 'characterSelect' && (
           <CharacterSelectScreen
+            gameMode={gameState.gameMode || undefined}
             onComplete={(characters) => {
               setSelectedCharacters(characters);
-              // 캐릭터 선택 완료 후 게임 화면으로 이동 (모든 플레이어가 선택할 때까지 대기)
-              navigateToScreen('game');
+              if (gameState.gameMode === 'quick') {
+                // 빠른 게임: LoadingScreen으로 이동하여 서버 연결 및 매칭
+                navigateToScreen('loading');
+              } else {
+                // 커스텀 게임: 이미 서버에 연결되어 있으므로 게임 화면으로 이동
+                navigateToScreen('game');
+              }
             }}
             onBack={() => {
               if (gameState.gameMode === 'quick') {

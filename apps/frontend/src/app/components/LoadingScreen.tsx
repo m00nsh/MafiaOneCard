@@ -50,10 +50,9 @@ export default function LoadingScreen({
         console.error('[LoadingScreen] 빠른 게임 연결 실패:', error);
       });
 
+      // 게임 화면으로 이동할 때 연결 유지 (cleanup에서 disconnect 하지 않음)
       return () => {
-        console.log('[LoadingScreen] 빠른 게임 모드: 컴포넌트 언마운트, 연결 해제');
-        // 컴포넌트 언마운트 시 연결 해제
-        disconnect();
+        console.log('[LoadingScreen] 빠른 게임 모드: 컴포넌트 언마운트 (연결 유지)');
       };
     } else if (gameMode === 'custom') {
       console.log('[LoadingScreen] 커스텀 게임 모드: 서버 연결 시작');
@@ -93,10 +92,9 @@ export default function LoadingScreen({
         }
       });
 
+      // 게임 화면으로 이동할 때 연결 유지 (cleanup에서 disconnect 하지 않음)
       return () => {
-        console.log('[LoadingScreen] 커스텀 게임 모드: 컴포넌트 언마운트, 연결 해제');
-        // 컴포넌트 언마운트 시 연결 해제
-        disconnect();
+        console.log('[LoadingScreen] 커스텀 게임 모드: 컴포넌트 언마운트 (연결 유지)');
       };
     } else {
       // 기타 모드: 기존 로직 (2초 후 완료)
