@@ -481,7 +481,11 @@ export class MafiaRoom extends Room<GameStateSchema> {
             const player = this.state.players.get(client.sessionId);
             if (player) {
                 player.isReady = !player.isReady;
-                this.checkStartGame();
+                // 빠른 게임 모드에서만 자동 시작 체크
+                // 커스텀 게임에서는 방장이 start_game 메시지를 보내야 함
+                if (this.gameMode === 'quick') {
+                    this.checkStartGame();
+                }
             }
         });
 
@@ -1024,11 +1028,9 @@ export class MafiaRoom extends Room<GameStateSchema> {
             this.startTimer(5, () => this.checkLobbyTimerStep1());
         }
 
-        // 커스텀 게임 모드: 플레이어가 준비 버튼을 눌렀을 때만 게임 시작 확인
-        // 빠른 게임 모드에서는 타이머가 만료된 후에만 게임 시작 (checkLobbyTimerStep1에서 처리)
-        if (this.gameMode === 'custom') {
-            this.checkStartGame();
-        }
+        // 커스텀 게임 모드: 방장이 start_game 메시지를 보내야 게임 시작
+        // 빠른 게임 모드: 타이머가 만료된 후 자동 시작 (checkLobbyTimerStep1에서 처리)
+        // (커스텀 게임에서는 여기서 checkStartGame()을 호출하지 않음)
     }
 
     onLeave(client: Client, consented: boolean) {

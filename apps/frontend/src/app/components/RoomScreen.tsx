@@ -171,13 +171,18 @@ export default function RoomScreen({
     return cleanup;
   }, [status, onMessage, onNavigateToCharacterSelect]);
 
+  // 현재 플레이어 및 방장 상태 계산 (방장 인계 시 동적 업데이트 반영)
+  const currentPlayer = players.find(p => p.id === sessionId);
+  const effectiveIsHost = currentPlayer?.isHost ?? isHost;
+
   const emptySlots = Math.max(0, maxPlayers - players.length);
   const hasEnoughPlayers = players.length >= 2;
   // 호스트를 제외한 모든 플레이어가 준비되었는지 확인 (호스트는 항상 ready로 간주)
   const allNonHostReady = players.filter(p => !p.isHost).length > 0 
     ? players.filter(p => !p.isHost).every(p => p.isReady)
     : true; // 호스트만 있으면 true
-  const canStart = isHost && allNonHostReady && hasEnoughPlayers && gameState?.status === 'LOBBY';
+  // effectiveIsHost 사용 (방장 인계 시 동적 업데이트 반영)
+  const canStart = effectiveIsHost && allNonHostReady && hasEnoughPlayers && gameState?.status === 'LOBBY';
 
   const handleAddSlot = () => {
     if (maxPlayers < 5) {
@@ -185,7 +190,7 @@ export default function RoomScreen({
       setMaxPlayersLocal(newMax);
       onSetPlayerCount(newMax);
       // 서버에 즉시 반영
-      if (sendMessage && isHost) {
+      if (sendMessage && effectiveIsHost) {
         sendMessage('update_max_players', { maxPlayers: newMax });
       }
     }
@@ -200,7 +205,7 @@ export default function RoomScreen({
     setMaxPlayersLocal(newMax);
     onSetPlayerCount(newMax);
     // 서버에 즉시 반영
-    if (sendMessage && isHost) {
+    if (sendMessage && effectiveIsHost) {
       sendMessage('update_max_players', { maxPlayers: newMax });
     }
   };
@@ -270,8 +275,6 @@ export default function RoomScreen({
     sendMessage('ready', {});
     // toast는 서버에서 상태가 업데이트되면 자동으로 반영되므로 제거
   };
-
-  const currentPlayer = players.find(p => p.id === sessionId);
 
   // Guest mode: Show invite code input (서버에 연결되지 않은 경우)
   if (!isHost && !hasConnectedRef.current && status !== 'connected') {
@@ -426,12 +429,12 @@ export default function RoomScreen({
             {Array.from({ length: emptySlots }).map((_, index) => (
               <div
                 key={`empty-${index}`}
-                className={`w-44 aspect-[3/4] bg-gray-700/80 rounded-xl p-2 flex flex-col items-center justify-center relative transition-colors ${isHost ? 'hover:bg-gray-700 group cursor-pointer' : ''}`}
-                onClick={isHost ? handleRemoveSlot : undefined}
-                role={isHost ? "button" : undefined}
-                tabIndex={isHost ? 0 : undefined}
+                className={`w-44 aspect-[3/4] bg-gray-700/80 rounded-xl p-2 flex flex-col items-center justify-center relative transition-colors ${effectiveIsHost ? 'hover:bg-gray-700 group cursor-pointer' : ''}`}
+                onClick={effectiveIsHost ? handleRemoveSlot : undefined}
+                role={effectiveIsHost ? "button" : undefined}
+                tabIndex={effectiveIsHost ? 0 : undefined}
               >
-                {isHost ? (
+                {effectiveIsHost ? (
                   <>
                     <div className="w-20 h-20 rounded-full bg-black/20 flex items-center justify-center mb-2 group-hover:bg-red-500/20 transition-colors">
                       <X className="w-10 h-10 text-white/50 group-hover:text-red-400 transition-colors" />
@@ -450,7 +453,7 @@ export default function RoomScreen({
             ))}
 
             {/* Add slot button */}
-            {isHost && maxPlayers < 5 && (
+            {effectiveIsHost && maxPlayers < 5 && (
               <div
                 className="w-44 aspect-[3/4] bg-gray-400/50 hover:bg-gray-400/80 rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg"
                 onClick={handleAddSlot}
@@ -461,7 +464,7 @@ export default function RoomScreen({
           </div>
 
           <div className="flex justify-center">
-            {isHost ? (
+            {effectiveIsHost ? (
               <button
                 onClick={() => {
                   console.log('[RoomScreen] 호스트가 Start 버튼 클릭');

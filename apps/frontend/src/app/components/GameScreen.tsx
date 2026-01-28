@@ -10,6 +10,7 @@ import { cardFromUI, suitToUI } from '@/app/utils/cardConverter';
 import { CardPlayMessage, DrawCardMessage, CardPlayResponseMessage, DrawCardResponseMessage, CardSuit, GameEndMessage, CHARACTER_SKILLS, CharacterId } from '@mafia/shared';
 import { isCardPlayable } from '@/app/utils/cardPlayabilityUtils';
 import { transformPlayersToOpponents } from '@/app/utils/opponentTransformUtils';
+import { toast } from 'sonner';
 
 // Game UI Components
 import TurnDirectionIndicator from '@/app/components/game/TurnDirectionIndicator';
@@ -36,7 +37,7 @@ interface GameScreenProps {
 
 export default function GameScreen({ playerCount: initialPlayerCount = 4, selectedCharacters, nickname, gameMode, onBackToMain }: GameScreenProps) {
   // Colyseus 연결
-  const { status, sessionId, gameState, connect, error, sendMessage, onMessage } = useColyseus();
+  const { status, sessionId, gameState, connect, disconnect, error, sendMessage, onMessage } = useColyseus();
   const { showError } = useToast();
   const loadingDots = useLoadingDots(status === 'connecting');
 
@@ -139,6 +140,17 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
 
   // 게임 종료 등수가 이미 설정되었는지 추적 (파산 시 한 번 설정되면 변경되지 않아야 함)
   const gameEndReceivedRef = useRef(false);
+
+  // 각 플레이어의 이전 카드 수 추적 (원 카드 알림용)
+  const prevHandCountsRef = useRef<Map<string, number>>(new Map());
+
+  // 게임 상태가 LOBBY로 변경되면 기록 초기화
+  useEffect(() => {
+    if (isLobby) {
+      prevHandCountsRef.current.clear();
+      gameEndReceivedRef.current = false;
+    }
+  }, [isLobby]);
 
   // 서버 응답 메시지 리스너
   useEffect(() => {
@@ -327,6 +339,31 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
       setShowSkillDialog(true);
     }
   }, [isMyTurn, isPlaying, gameState?.myPlayer, DEBUG]);
+
+  // 원 카드 알림: 누군가 카드가 1장이 "될 때마다" 토스트 표시
+  useEffect(() => {
+    if (!isPlaying || !gameState?.players) return;
+
+    gameState.players.forEach((player, playerId) => {
+      const prevCount = prevHandCountsRef.current.get(playerId);
+      const currentCount = player.handCount;
+
+      // 이전 카드 수가 1보다 많았는데 현재 1장이 된 경우에만 알림
+      // (이전 기록이 없으면 초기 상태이므로 알림 안 함 - 게임 시작 시 모두 7장)
+      if (prevCount !== undefined && prevCount > 1 && currentCount === 1) {
+        const playerName = player.nickname || '플레이어';
+        toast.info(`🎴 원 카드! - ${playerName}`, {
+          duration: 2000,
+        });
+        if (DEBUG) {
+          console.log(`[GameScreen] 원 카드 알림: ${playerName}`);
+        }
+      }
+
+      // 현재 카드 수 저장
+      prevHandCountsRef.current.set(playerId, currentCount);
+    });
+  }, [isPlaying, gameState?.players, DEBUG]);
   const handleToggleReady = () => {
     if (!isLobby) return;
     const newReadyState = !myReadyState;
@@ -543,6 +580,8 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
           sessionId={sessionId}
           onConfirm={() => {
             setShowStatsDialog(false);
+            // 서버 연결 해제 (다음 게임을 위해)
+            disconnect();
             if (onBackToMain) {
               onBackToMain();
             }
