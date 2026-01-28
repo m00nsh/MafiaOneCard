@@ -127,7 +127,7 @@ export default function CharacterSelectScreen({ onComplete, onBack, gameMode }: 
 
   return (
     <LandscapeLayout>
-      <div 
+      <div
         className="size-full flex flex-col items-center justify-center p-2 sm:p-4 relative bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage: 'url(/Lobby_background.png)',
