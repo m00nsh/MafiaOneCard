@@ -72,11 +72,18 @@ export default function BottomArea({
         </div>
         <button
           onClick={onToggleSort}
-          className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-4 rounded-xl text-xl font-bold shadow-lg transition-transform hover:scale-105 w-full whitespace-nowrap"
+          className="transition-transform hover:scale-105 w-full"
         >
-          {sortMode === 'none' && 'Sort: Off'}
-          {sortMode === 'suit' && 'Sort: Suit'}
-          {sortMode === 'rank' && 'Sort: Rank'}
+          <img
+            src={
+              sortMode === 'none' ? '/sort_off.png' :
+              sortMode === 'suit' ? '/sort_suit.png' :
+              '/sort_rank.png'
+            }
+            alt={`Sort: ${sortMode === 'none' ? 'Off' : sortMode === 'suit' ? 'Suit' : 'Rank'}`}
+            className="w-full h-auto max-h-[56px] object-contain"
+            draggable={false}
+          />
         </button>
       </div>
 
