@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
+import { useColyseus } from '@/app/contexts/ColyseusContext';
+import { CharacterId } from '@mafia/shared';
+import { toast } from 'sonner';
 
 export interface Character {
   id: string;
@@ -78,6 +81,7 @@ interface CharacterSelectScreenProps {
 export default function CharacterSelectScreen({ onComplete, onBack }: CharacterSelectScreenProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
+  const { sendMessage, status } = useColyseus();
 
   // Show 4 cards at a time
   const visibleCount = 4;
@@ -96,8 +100,21 @@ export default function CharacterSelectScreen({ onComplete, onBack }: CharacterS
   };
 
   const handleSelect = () => {
-    if (!selectedCharacterId) return;
-    onComplete([selectedCharacterId]);
+    if (!selectedCharacterId) {
+      toast.error('캐릭터를 선택해주세요.');
+      return;
+    }
+
+    // 서버에 캐릭터 선택 메시지 전송
+    if (sendMessage && status === 'connected') {
+      console.log('[CharacterSelectScreen] 캐릭터 선택 전송:', selectedCharacterId);
+      sendMessage('select_character', { characterId: selectedCharacterId as CharacterId });
+      // 캐릭터 선택 완료 후 게임 스크린으로 이동
+      onComplete([selectedCharacterId]);
+    } else {
+      console.error('[CharacterSelectScreen] 서버에 연결되지 않았습니다.');
+      toast.error('서버에 연결되지 않았습니다.');
+    }
   };
 
   return (

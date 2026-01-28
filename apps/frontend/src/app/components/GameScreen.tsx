@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import LandscapeLayout from '@/app/components/ui/LandscapeLayout';
 import { Card } from '@/app/utils/gameLogic';
-import { useColyseusRoom } from '@/app/hooks/useColyseusRoom';
+import { useColyseus } from '@/app/contexts/ColyseusContext';
 import { useToast } from '@/app/hooks/useToast';
 import { useCardSorting } from '@/app/hooks/useCardSorting';
 import { useLoadingDots } from '@/app/hooks/useLoadingDots';
@@ -36,7 +36,7 @@ interface GameScreenProps {
 
 export default function GameScreen({ playerCount: initialPlayerCount = 4, selectedCharacters, nickname, gameMode, onBackToMain }: GameScreenProps) {
   // Colyseus 연결
-  const { status, sessionId, gameState, connect, error, sendMessage, onMessage } = useColyseusRoom();
+  const { status, sessionId, gameState, connect, error, sendMessage, onMessage } = useColyseus();
   const { showError } = useToast();
   const loadingDots = useLoadingDots(status === 'connecting');
 
@@ -142,9 +142,10 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
 
   // 서버 응답 메시지 리스너
   useEffect(() => {
-    if (!onMessage) return;
+    if (status !== 'connected') return;
+    const cleanupFns: Array<() => void> = [];
 
-    onMessage<CardPlayResponseMessage>('card_play_response', (response) => {
+    cleanupFns.push(onMessage<CardPlayResponseMessage>('card_play_response', (response) => {
       if (response.success) {
         if (DEBUG) {
           console.log('[GameScreen] 카드 내기 성공:', response);
@@ -152,9 +153,9 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
       } else {
         console.error('[GameScreen] 카드 내기 실패:', response.error);
       }
-    });
+    }));
 
-    onMessage<DrawCardResponseMessage>('draw_card_response', (response) => {
+    cleanupFns.push(onMessage<DrawCardResponseMessage>('draw_card_response', (response) => {
       if (response.success) {
         if (DEBUG) {
           console.log('[GameScreen] 카드 뽑기 성공:', response);
@@ -162,9 +163,9 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
       } else {
         console.error('[GameScreen] 카드 뽑기 실패:', response.error);
       }
-    });
+    }));
 
-    onMessage<GameEndMessage>('game_end', (message) => {
+    cleanupFns.push(onMessage<GameEndMessage>('game_end', (message) => {
       console.log('[GameScreen] 게임 종료:', message);
       console.log('[GameScreen] 내 sessionId:', sessionId, 'stats:', message.stats);
 
@@ -204,19 +205,19 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
         reason: message.reason,
       });
       setShowStatsDialog(true);
-    });
+    }));
 
     // 스킬 사용 알림 (토스트 제거, 콘솔 로그만)
-    onMessage<{ playerId: string; skillId: string; targetPlayerId?: string }>('skill_used', (message) => {
+    cleanupFns.push(onMessage<{ playerId: string; skillId: string; targetPlayerId?: string }>('skill_used', (message) => {
       if (DEBUG) {
         const playerName = gameState?.players.get(message.playerId)?.nickname || '플레이어';
         const skillName = CHARACTER_SKILLS[message.skillId as CharacterId]?.name || '스킬';
         console.log(`[GameScreen] ${playerName}이(가) ${skillName}을(를) 사용했습니다.`);
       }
-    });
+    }));
 
     // 주술사 강제 스킬 신호 수신
-    onMessage<{ 
+    cleanupFns.push(onMessage<{ 
       skillId: string;
       message: string;
     }>('shaman_force_skill', (message) => {
@@ -228,10 +229,10 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
       if (isMyTurn && isPlaying) {
         setShowSkillDialog(true);
       }
-    });
+    }));
 
     // 공지사항 알림 (토스트 제거, 콘솔 로그만)
-    onMessage<{ message: string; type?: 'info' | 'warning' | 'error' | 'success' }>('announcement', (announcement) => {
+    cleanupFns.push(onMessage<{ message: string; type?: 'info' | 'warning' | 'error' | 'success' }>('announcement', (announcement) => {
       if (DEBUG) {
         const message = typeof announcement === 'string' ? announcement : announcement.message;
         console.log('[GameScreen] 공지사항:', message);
@@ -245,17 +246,15 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
         // 7 카드 팝업 닫기 (백엔드에서 랜덤 색깔을 선택하므로 프론트엔드에서는 닫기만 함)
         setShowSuitDialog(false);
       }
-    });
+    }));
 
     // 예언자 스킬 결과 수신
-    onMessage<{
+    cleanupFns.push(onMessage<{
       cards: Array<{ id: string; suit: string; rank: string }>;
       targetPlayerId?: string;
       targetPlayerName?: string;
       totalCards?: number;
     }>('prophet_result', (message) => {
-      // ... existing code ...
-      // (omitted for brevity, keep existing prophet logic)
       if (DEBUG) console.log('[GameScreen] 예언자 스킬 결과:', message);
 
       const uiCards: Card[] = message.cards.map(card => {
@@ -281,16 +280,20 @@ export default function GameScreen({ playerCount: initialPlayerCount = 4, select
         setProphetCards(null);
         setProphetTargetName('');
       }, 3000);
-    });
+    }));
+
     // 소환사 체크 결과 수신
-    onMessage<any>('summoner_check_result', (result) => {
+    cleanupFns.push(onMessage<any>('summoner_check_result', (result) => {
       if (summonCheckResolverRef.current) {
         summonCheckResolverRef.current(result);
         summonCheckResolverRef.current = null;
       }
-    });
+    }));
 
-  }, [onMessage, sessionId, gameState?.players, isMyTurn, isPlaying]);
+    return () => {
+      cleanupFns.forEach(fn => fn());
+    };
+  }, [status, onMessage, sessionId, gameState?.players, isMyTurn, isPlaying]);
 
   // 소환사 체크 resolver Ref
   const summonCheckResolverRef = useRef<((result: any) => void) | null>(null);

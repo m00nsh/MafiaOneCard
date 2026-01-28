@@ -217,6 +217,7 @@ export class GameStateSchema extends Schema {
     @type("number") deckCount: number = 0;
     @type("string") winnerId: string = "";
     @type("number") timerEndTime: number = 0; // Timestamp (Date.now() + duration)
+    @type("number") maxPlayers: number = GAME_CONSTANTS.MAX_PLAYERS; // 방 최대 인원 수
 }
 
 // ============================================================================
