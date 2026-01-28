@@ -1,0 +1,1041 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.MafiaRoom = void 0;
+const colyseus_1 = require("colyseus");
+const shared_1 = require("@mafia/shared");
+const Deck_1 = require("../entities/Deck");
+const TurnManager_1 = require("../engine/TurnManager");
+const OneCardEngine_1 = require("../engine/OneCardEngine");
+const SkillManager_1 = require("../engine/SkillManager");
+const BotManager_1 = require("../engine/BotManager");
+class MafiaRoom extends colyseus_1.Room {
+    constructor() {
+        super(...arguments);
+        // Game Mode
+        this.gameMode = 'custom';
+        // Room Code (커스텀 게임용)
+        this.roomCode = null;
+        // Max Players (커스텀 게임용, 호스트가 설정)
+        this.maxPlayers = shared_1.GAME_CONSTANTS.MAX_PLAYERS;
+        // 이전 턴 플레이어 ID (주술사 강제 스킬 체크용)
+        this.previousTurnPlayerId = null;
+    }
+    onCreate(options) {
+        console.log(`[MafiaRoom.onCreate] 방 생성 시작. Options:`, JSON.stringify(options));
+        // 1. State Initialization
+        this.setState(new shared_1.GameStateSchema());
+        this.state.status = "LOBBY";
+        this.state.direction = "clockwise";
+        this.state.attackStack = 0;
+        this.state.deckCount = 0;
+        this.state.topCard = new shared_1.CardSchema("", "SPADE", "A");
+        console.log(`[MafiaRoom.onCreate] 게임 상태 초기화 완료. Status: ${this.state.status}`);
+        // 2. Component Initialization
+        this.deck = new Deck_1.Deck();
+        this.turnManager = new TurnManager_1.TurnManager(this.state);
+        this.engine = new OneCardEngine_1.OneCardEngine(this.state, this.deck, this.turnManager);
+        this.skillManager = new SkillManager_1.SkillManager(this.state, this.deck, this.turnManager, this.engine);
+        this.botManager = new BotManager_1.BotManager(this.state, this.engine);
+        console.log(`[MafiaRoom.onCreate] 게임 컴포넌트 초기화 완료`);
+        // Store game mode for later use
+        this.gameMode = options?.mode || 'custom';
+        console.log(`[MafiaRoom.onCreate] 게임 모드: ${this.gameMode}`);
+        // Store max players (커스텀 게임의 경우 호스트가 설정한 값)
+        if (options?.maxPlayers && options.maxPlayers >= shared_1.GAME_CONSTANTS.MIN_PLAYERS && options.maxPlayers <= shared_1.GAME_CONSTANTS.MAX_PLAYERS) {
+            this.maxPlayers = options.maxPlayers;
+            console.log(`[MafiaRoom.onCreate] 최대 플레이어 수 설정: ${this.maxPlayers}`);
+        }
+        // GameState에 maxPlayers 설정
+        this.state.maxPlayers = this.maxPlayers;
+        // Store room code for custom games
+        // 커스텀 게임인 경우 방 코드 저장 (빠른 게임은 방 코드 없음)
+        if (this.gameMode === 'custom' && options?.roomCode) {
+            this.roomCode = options.roomCode.toUpperCase();
+            console.log(`[MafiaRoom.onCreate] 커스텀 게임 방 생성. 방 코드: ${this.roomCode}, 최대 인원: ${this.maxPlayers}`);
+            // Colyseus 메타데이터에 방 코드 저장 (filterBy를 위한)
+            this.setMetadata({ roomCode: this.roomCode, mode: 'custom', maxPlayers: this.maxPlayers });
+            console.log(`[MafiaRoom.onCreate] 메타데이터 설정 완료. roomCode: ${this.roomCode}, mode: custom, maxPlayers: ${this.maxPlayers}`);
+        }
+        else if (this.gameMode === 'quick') {
+            // 빠른 게임은 방 코드 없음
+            this.roomCode = null;
+            this.maxPlayers = shared_1.GAME_CONSTANTS.MAX_PLAYERS; // 빠른 게임은 항상 최대 인원
+            this.setMetadata({ mode: 'quick', maxPlayers: this.maxPlayers });
+            console.log(`[MafiaRoom.onCreate] 빠른 게임 방 생성. 방 코드 없음, 최대 인원: ${this.maxPlayers}`);
+        }
+        else {
+            console.log(`[MafiaRoom.onCreate] 경고: 게임 모드가 명시되지 않았거나 방 코드가 없습니다. mode: ${this.gameMode}, roomCode: ${options?.roomCode || 'none'}`);
+        }
+        console.log(`[MafiaRoom.onCreate] 방 생성 완료. Room ID: ${this.roomId}`);
+        // Turn Listener for Cooldowns & Timer
+        this.turnManager.onTurnChange = (playerId) => {
+            // 게임이 진행 중이 아니면 무시
+            if (this.state.status !== "PLAYING") {
+                console.log(`Turn change ignored - game not playing (status: ${this.state.status})`);
+                return;
+            }
+            // 플레이어가 1명 이하면 게임 종료
+            if (this.state.players.size <= 1) {
+                console.log(`Only 1 player left, ending game`);
+                this.state.status = "ENDED";
+                this.handleGameEnd(playerId);
+                return;
+            }
+            // 턴이 넘어가기 전 이전 플레이어의 주술사 강제 스킬 체크
+            if (this.previousTurnPlayerId && this.previousTurnPlayerId !== playerId) {
+                this.checkShamanForcedSkillBeforeTurnEnd(this.previousTurnPlayerId);
+            }
+            // 이전 턴 플레이어 ID 업데이트
+            this.previousTurnPlayerId = playerId;
+            this.skillManager.onTurnStart(playerId);
+            // 주술사 강제 스킬 처리 (턴 시작 시 자동 스킬 사용)
+            this.handleShamanForcedSkill(playerId);
+            // Turn Timer (10s)
+            this.startTimer(10, () => this.handleTurnTimeout(playerId));
+            // Bot Action
+            if (shared_1.GAME_CONSTANTS.ENABLE_BOTS && this.botManager.isBot(playerId)) {
+                this.clock.setTimeout(() => this.processBotTurn(playerId), 1000);
+            }
+        };
+        // 3. Message Handlers Registration (CRITICAL!)
+        this.setupMessageHandlers();
+        // 4. Lobby Timer는 onJoin에서 플레이어가 접속할 때마다 리셋됨
+        // (첫 번째 플레이어 접속 시 onJoin에서 타이머 시작)
+    }
+    startTimer(seconds, callback) {
+        if (this.currentTimer)
+            this.currentTimer.clear();
+        this.state.timerEndTime = Date.now() + (seconds * 1000);
+        this.currentTimer = this.clock.setTimeout(() => {
+            this.clearTimer();
+            callback();
+        }, seconds * 1000);
+    }
+    clearTimer() {
+        if (this.currentTimer) {
+            this.currentTimer.clear();
+            this.currentTimer = undefined;
+        }
+        this.state.timerEndTime = 0;
+    }
+    handleTurnTimeout(playerId) {
+        // 게임이 진행 중이 아니면 무시
+        if (this.state.status !== "PLAYING") {
+            console.log(`Turn timeout ignored - game not playing (status: ${this.state.status})`);
+            return;
+        }
+        // 현재 턴이 아니면 무시 (이미 다른 액션이 처리됨)
+        if (this.state.currentTurn !== playerId) {
+            console.log(`Turn timeout ignored - not current turn (current: ${this.state.currentTurn}, timeout for: ${playerId})`);
+            return;
+        }
+        console.log(`Turn timeout for ${playerId}`);
+        const player = this.state.players.get(playerId);
+        if (!player)
+            return;
+        // 플레이어가 1명만 남았으면 게임 종료
+        if (this.state.players.size <= 1) {
+            console.log(`Only 1 player left, ending game`);
+            this.state.status = "ENDED";
+            this.handleGameEnd(playerId);
+            return;
+        }
+        // 7 카드 팝업이 열려있는 경우 (topCard가 7이고 selectedSuit이 비어있음)
+        // 랜덤 색깔 선택하고 카드 추가로 가져가지 않고 턴 넘어감
+        if (this.state.topCard.rank === '7' && this.state.selectedSuit === '') {
+            const suits = ['SPADE', 'HEART', 'DIAMOND', 'CLUB'];
+            const randomSuit = suits[Math.floor(Math.random() * suits.length)];
+            this.state.selectedSuit = randomSuit;
+            this.broadcast("announcement", `${player.nickname} timed out. Random suit selected: ${randomSuit}.`);
+            this.turnManager.nextTurn();
+            return;
+        }
+        // 공격 스택이 쌓인 경우: 스택만큼 카드 가져가기
+        if (this.state.attackStack > 0) {
+            if (this.deck.count === 0)
+                this.deck.replenish();
+            const cardsToDraw = this.state.attackStack;
+            for (let i = 0; i < cardsToDraw; i++) {
+                if (this.deck.count === 0)
+                    this.deck.replenish();
+                const card = this.deck.draw();
+                if (card)
+                    player.hand.push(new shared_1.CardSchema(card.id, card.suit, card.rank));
+            }
+            this.state.attackStack = 0;
+            this.state.deckCount = this.deck.count;
+            this.broadcast("announcement", `${player.nickname} timed out and drew ${cardsToDraw} card(s) due to attack stack.`);
+            // 파산 체크 (20장 초과)
+            if (player.hand.length > shared_1.GAME_CONSTANTS.MAX_HAND_SIZE) {
+                const client = Array.from(this.clients.values()).find(c => c.sessionId === playerId);
+                if (client) {
+                    this.handlePlayerElimination(client, 'burst');
+                    return;
+                }
+                else if (this.botManager.isBot(playerId)) {
+                    // 봇 파산 처리
+                    this.broadcast("announcement", `${player.nickname} burst with ${player.hand.length} cards!`);
+                    this.state.players.delete(playerId);
+                    if (this.state.players.size <= 1) {
+                        const winnerId = Array.from(this.state.players.keys())[0] || '';
+                        this.state.winnerId = winnerId;
+                        this.state.status = "ENDED";
+                        this.handleGameEnd(winnerId);
+                        return;
+                    }
+                }
+            }
+            this.turnManager.nextTurn();
+            return;
+        }
+        // 주술사 강제 스킬이 있는 경우 처리 (타이머 만료 시)
+        // 일반적으로는 checkShamanForcedSkillBeforeTurnEnd에서 처리되지만,
+        // 타이머 만료 시에는 여기서도 체크
+        if (player.activeEffects.includes("shaman_forced_skill")) {
+            this.checkShamanForcedSkillBeforeTurnEnd(playerId);
+            this.turnManager.nextTurn();
+            return;
+        }
+        // 일반 경우: 카드 1장 가져가기
+        if (this.deck.count === 0)
+            this.deck.replenish();
+        const card = this.deck.draw();
+        if (card)
+            player.hand.push(new shared_1.CardSchema(card.id, card.suit, card.rank));
+        this.state.deckCount = this.deck.count;
+        this.broadcast("announcement", `${player.nickname} timed out and drew a card.`);
+        // 파산 체크 (20장 초과)
+        if (player.hand.length > shared_1.GAME_CONSTANTS.MAX_HAND_SIZE) {
+            const client = Array.from(this.clients.values()).find(c => c.sessionId === playerId);
+            if (client) {
+                this.handlePlayerElimination(client, 'burst');
+                return; // 파산 시 턴 넘기기 불필요
+            }
+            else if (this.botManager.isBot(playerId)) {
+                // 봇 파산 처리
+                this.broadcast("announcement", `${player.nickname} burst with ${player.hand.length} cards!`);
+                this.state.players.delete(playerId);
+                // 남은 플레이어 체크
+                if (this.state.players.size <= 1) {
+                    const winnerId = Array.from(this.state.players.keys())[0] || '';
+                    this.state.winnerId = winnerId;
+                    this.state.status = "ENDED";
+                    this.handleGameEnd(winnerId);
+                    return;
+                }
+            }
+        }
+        this.turnManager.nextTurn();
+    }
+    processBotTurn(botId) {
+        if (this.state.status !== "PLAYING" || this.state.currentTurn !== botId)
+            return;
+        const action = this.botManager.decideAction(botId);
+        if (!action)
+            return;
+        if (action.type === 'play' && action.payload) {
+            const result = this.engine.processCardPlay(botId, action.payload.cardId, action.payload.selectedSuit);
+            if (result.success) {
+                this.state.deckCount = this.deck.count;
+                this.broadcast("card_play_response", { success: true, newTopCard: this.state.topCard });
+                this.broadcast("announcement", `${botId} played a card.`);
+                if (result.isGameEnded) {
+                    this.handleGameEnd(this.state.winnerId);
+                    return;
+                }
+                // K 카드로 인해 턴이 유지되는 경우, 봇이 다시 행동해야 함
+                if (this.state.currentTurn === botId && this.state.status === "PLAYING") {
+                    console.log(`[processBotTurn] Bot ${botId} still has turn (K card), processing again...`);
+                    this.clock.setTimeout(() => this.processBotTurn(botId), 1000);
+                }
+            }
+            else {
+                // 카드 내기 실패 시 카드 뽑기로 전환
+                this.handleTurnTimeout(botId);
+            }
+        }
+        else {
+            // draw 액션 또는 다른 경우
+            this.handleTurnTimeout(botId);
+        }
+    }
+    // Unified Queue Logic: Step 1 (5 seconds)
+    // 5초 타이머가 만료된 후 호출됨
+    checkLobbyTimerStep1() {
+        if (this.state.status !== "LOBBY")
+            return;
+        const currentCount = this.state.players.size;
+        console.log(`Lobby Step 1 (5s). Players: ${currentCount}`);
+        // Condition A: Max players (5) reached -> Start immediately (이미 onJoin에서 처리되지만 안전장치)
+        if (currentCount >= shared_1.GAME_CONSTANTS.MAX_PLAYERS) {
+            this.broadcast("announcement", `Max players (${shared_1.GAME_CONSTANTS.MAX_PLAYERS}) gathered. Starting game!`);
+            this.startGame();
+            return;
+        }
+        // Condition B: >= 3 Players -> Start game (5초 대기 후 시작)
+        if (currentCount >= 3) {
+            this.broadcast("announcement", "Starting game with current players!");
+            this.startGame();
+            return;
+        }
+        // Condition C: < 3 Players -> Wait 5s more for bots
+        this.broadcast("announcement", "Waiting for more players... (Extending 5s)");
+        this.startTimer(5, () => this.checkLobbyTimerStep2());
+    }
+    // Unified Queue Logic: Step 2 (10 seconds total)
+    checkLobbyTimerStep2() {
+        if (this.state.status !== "LOBBY")
+            return;
+        const currentCount = this.state.players.size;
+        console.log(`Lobby Step 2 (10s). Players: ${currentCount}, Mode: ${this.gameMode}`);
+        // Condition A: >= 3 Players -> Start
+        if (currentCount >= 3) {
+            this.broadcast("announcement", "Starting game!");
+            this.startGame();
+            return;
+        }
+        // Condition B: < 3 Players -> Fill Bots (if enabled and quick mode only)
+        // 커스텀 게임 모드에서는 AI 봇을 추가하지 않음
+        if (shared_1.GAME_CONSTANTS.ENABLE_BOTS && this.gameMode === 'quick') {
+            const needed = 3 - currentCount;
+            const existingIds = Array.from(this.state.players.keys());
+            for (let i = 0; i < needed; i++) {
+                const { sessionId, player } = this.botManager.createBot(existingIds);
+                this.state.players.set(sessionId, player);
+                existingIds.push(sessionId);
+            }
+            this.broadcast("announcement", `Added ${needed} AI bots to reach min players.`);
+            this.startGame();
+        }
+        else {
+            // 커스텀 게임 모드이거나 봇이 비활성화된 경우: 대기
+            if (this.gameMode === 'custom') {
+                console.log(`[MafiaRoom.checkLobbyTimerStep2] 커스텀 게임 모드: AI 봇 추가하지 않음. 플레이어 대기 중...`);
+            }
+            // Wait longer (Loop Step 2)
+            this.broadcast("announcement", "Waiting for players...");
+            this.startTimer(5, () => this.checkLobbyTimerStep2());
+        }
+    }
+    setupMessageHandlers() {
+        // [Action] Card Play
+        this.onMessage("card_play", (client, message) => {
+            if (this.state.status !== "PLAYING")
+                return;
+            if (this.state.currentTurn !== client.sessionId) {
+                this.sendError(client, shared_1.ErrorCode.NOT_YOUR_TURN, "Not your turn.");
+                return;
+            }
+            // Logic Delegation
+            const result = this.engine.processCardPlay(client.sessionId, message.cardId, message.selectedSuit);
+            if (!result.success) {
+                client.send("card_play_response", { success: false, error: result.error });
+            }
+            else {
+                // Success Response
+                this.state.deckCount = this.deck.count;
+                client.send("card_play_response", {
+                    success: true,
+                    newTopCard: this.state.topCard,
+                    attackStack: this.state.attackStack
+                });
+                this.broadcast("announcement", `${client.sessionId} played a card!`);
+                // 주의: 카드 내기 시 주술사 강제 스킬 체크는 onTurnChange 콜백에서 처리됨
+                // (OneCardEngine에서 nextTurn()을 호출하므로, onTurnChange에서 이전 플레이어를 체크)
+                // 타이머 재시작 (K 카드로 턴이 넘어가지 않아도 타이머는 재시작)
+                // nextTurn()이 호출되지 않았을 수 있으므로 명시적으로 타이머 재시작
+                if (this.state.status === "PLAYING" && this.state.currentTurn === client.sessionId) {
+                    this.startTimer(10, () => this.handleTurnTimeout(client.sessionId));
+                }
+                // Check Game End 
+                if (result.isGameEnded) {
+                    this.handleGameEnd(this.state.winnerId);
+                }
+            }
+        });
+        // [Action] Draw Card
+        this.onMessage("draw_card", (client, message) => {
+            if (this.state.status !== "PLAYING")
+                return;
+            if (this.state.currentTurn !== client.sessionId) {
+                this.sendError(client, shared_1.ErrorCode.NOT_YOUR_TURN, "Not your turn.");
+                return;
+            }
+            this.handleDrawCard(client);
+        });
+        // [Action] Use Skill
+        this.onMessage("check_summon_target", (client, message) => {
+            const result = this.skillManager.checkSummonTarget(message.targetId);
+            client.send("summoner_check_result", result);
+        });
+        this.onMessage("use_skill", (client, message) => {
+            if (this.state.status !== "PLAYING")
+                return;
+            const result = this.skillManager.useSkill(client.sessionId, message.skillId, message.targetPlayerId, message.selectedCardId, message.targetPlayerIds);
+            if (!result.success) {
+                client.send("announcement", { message: result.error?.message || "Skill failed", type: "error" });
+                return;
+            }
+            // Broadcast skill usage
+            this.broadcast("skill_used", {
+                playerId: client.sessionId,
+                skillId: message.skillId,
+                targetPlayerId: message.targetPlayerId,
+                targetPlayerIds: message.targetPlayerIds // Broadcast list too
+            });
+            // 예언자 스킬: 확인한 카드 정보를 예언자에게만 개인 메시지로 전송
+            // 소환사가 예언자 스킬을 복사한 경우에도 동일하게 처리
+            if (result.prophetCards) {
+                const targetPlayer = result.targetPlayerId ? this.state.players.get(result.targetPlayerId) : null;
+                const targetPlayerName = targetPlayer?.nickname || '플레이어';
+                client.send("prophet_result", {
+                    cards: result.prophetCards,
+                    targetPlayerId: result.targetPlayerId,
+                    targetPlayerName: targetPlayerName,
+                    totalCards: targetPlayer ? targetPlayer.hand.length : 0
+                });
+            }
+            if (result.message) {
+                // 예언자 스킬의 경우 (소환사가 복사한 경우 포함), 다른 플레이어들에게는 일반적인 메시지만 브로드캐스트
+                // (카드 정보는 예언자/소환사에게만 전송됨)
+                if (result.prophetCards) {
+                    const targetPlayer = result.targetPlayerId ? this.state.players.get(result.targetPlayerId) : null;
+                    const targetPlayerName = targetPlayer?.nickname || '플레이어';
+                    const skillName = message.skillId === 'summoner' ? 'prophet (via summoner)' : message.skillId;
+                    this.broadcast("announcement", `${client.sessionId} used ${skillName}: Peeked at ${targetPlayerName}'s cards.`);
+                }
+                else {
+                    this.broadcast("announcement", `${client.sessionId} used ${message.skillId}: ${result.message}`);
+                }
+            }
+            // Check Immediate Game End / Elimination from Skill
+            if (result.isGameEnded) {
+                this.handleGameEnd(this.state.winnerId);
+                return;
+            }
+            if (result.eliminatedPlayerIds && result.eliminatedPlayerIds.length > 0) {
+                result.eliminatedPlayerIds.forEach(pid => {
+                    // Need client instance... iterate clients?
+                    const targetClient = this.clients.find(c => c.sessionId === pid);
+                    if (targetClient)
+                        this.handlePlayerElimination(targetClient, 'burst');
+                });
+            }
+        });
+        // [Action] Ready
+        this.onMessage("ready", (client, message) => {
+            const player = this.state.players.get(client.sessionId);
+            if (player) {
+                player.isReady = !player.isReady;
+                // 빠른 게임 모드에서만 자동 시작 체크
+                // 커스텀 게임에서는 방장이 start_game 메시지를 보내야 함
+                if (this.gameMode === 'quick') {
+                    this.checkStartGame();
+                }
+            }
+        });
+        // 방장이 게임 시작 버튼을 누를 때 (캐릭터 선택 단계로 이동)
+        this.onMessage("start_game", (client, message) => {
+            const player = this.state.players.get(client.sessionId);
+            if (!player || !player.isHost) {
+                console.log(`[MafiaRoom.start_game] 권한 없음. 호스트가 아님.`);
+                this.sendError(client, shared_1.ErrorCode.INVALID_ACTION, "Only host can start the game.");
+                return;
+            }
+            if (this.state.status !== "LOBBY") {
+                console.log(`[MafiaRoom.start_game] 게임이 이미 진행 중이거나 종료됨. status: ${this.state.status}`);
+                this.sendError(client, shared_1.ErrorCode.INVALID_ACTION, "Game is already in progress or ended.");
+                return;
+            }
+            // 최소 인원 체크
+            const minPlayers = this.gameMode === 'quick' ? 3 : 2;
+            if (this.state.players.size < minPlayers) {
+                console.log(`[MafiaRoom.start_game] 플레이어 수 부족: ${this.state.players.size} < ${minPlayers}`);
+                this.sendError(client, shared_1.ErrorCode.INVALID_ACTION, `Need at least ${minPlayers} players to start.`);
+                return;
+            }
+            // 모든 플레이어가 준비되었는지 확인 (호스트는 항상 준비된 것으로 간주)
+            const allNonHostReady = Array.from(this.state.players.values())
+                .filter(p => !p.isHost)
+                .every(p => p.isReady);
+            if (!allNonHostReady && this.state.players.size > 1) {
+                console.log(`[MafiaRoom.start_game] 아직 준비하지 않은 플레이어가 있음`);
+                this.sendError(client, shared_1.ErrorCode.INVALID_ACTION, "All players must be ready.");
+                return;
+            }
+            console.log(`[MafiaRoom.start_game] 방장이 게임 시작 요청. 모든 클라이언트에게 캐릭터 선택 화면으로 이동하도록 알림`);
+            // 모든 클라이언트에게 캐릭터 선택 화면으로 이동하도록 알림
+            this.broadcast("character_select", {});
+        });
+        // 플레이어가 캐릭터를 선택했을 때
+        this.onMessage("select_character", (client, message) => {
+            const player = this.state.players.get(client.sessionId);
+            if (!player) {
+                console.log(`[MafiaRoom.select_character] 플레이어를 찾을 수 없음. SessionId: ${client.sessionId}`);
+                this.sendError(client, shared_1.ErrorCode.INVALID_ACTION, "Player not found.");
+                return;
+            }
+            if (this.state.status !== "LOBBY") {
+                console.log(`[MafiaRoom.select_character] 게임이 이미 진행 중이거나 종료됨. status: ${this.state.status}`);
+                this.sendError(client, shared_1.ErrorCode.INVALID_ACTION, "Game is already in progress or ended.");
+                return;
+            }
+            const characterId = message.characterId;
+            if (!characterId || !shared_1.CHARACTER_SKILLS[characterId]) {
+                console.log(`[MafiaRoom.select_character] 잘못된 캐릭터 ID: ${characterId}`);
+                this.sendError(client, shared_1.ErrorCode.INVALID_ACTION, "Invalid character ID.");
+                return;
+            }
+            // 캐릭터 할당
+            player.characterId = characterId;
+            console.log(`[MafiaRoom.select_character] 플레이어 ${client.sessionId} (${player.nickname})가 캐릭터 선택: ${characterId}`);
+            // 모든 플레이어가 캐릭터를 선택했는지 확인
+            const allPlayersSelected = Array.from(this.state.players.values())
+                .every(p => p.characterId && p.characterId !== "");
+            if (allPlayersSelected) {
+                console.log(`[MafiaRoom.select_character] 모든 플레이어가 캐릭터를 선택했습니다. 게임 시작!`);
+                // 모든 플레이어가 캐릭터를 선택했으면 게임 시작
+                this.startGame();
+            }
+            else {
+                console.log(`[MafiaRoom.select_character] 아직 캐릭터를 선택하지 않은 플레이어가 있음. 대기 중...`);
+                // 아직 선택하지 않은 플레이어에게 알림
+                this.broadcast("announcement", {
+                    message: `${player.nickname}님이 캐릭터를 선택했습니다. (${Array.from(this.state.players.values()).filter(p => p.characterId && p.characterId !== "").length}/${this.state.players.size})`,
+                    type: "info"
+                });
+            }
+        });
+        // 방장이 최대 인원 수를 변경할 때
+        this.onMessage("update_max_players", (client, message) => {
+            const player = this.state.players.get(client.sessionId);
+            if (!player || !player.isHost) {
+                console.log(`[MafiaRoom.update_max_players] 권한 없음. 호스트가 아님.`);
+                this.sendError(client, shared_1.ErrorCode.INVALID_ACTION, "Only host can update max players.");
+                return;
+            }
+            const newMax = message.maxPlayers;
+            if (newMax < shared_1.GAME_CONSTANTS.MIN_PLAYERS || newMax > shared_1.GAME_CONSTANTS.MAX_PLAYERS) {
+                console.log(`[MafiaRoom.update_max_players] 잘못된 값: ${newMax}`);
+                this.sendError(client, shared_1.ErrorCode.INVALID_ACTION, `Max players must be between ${shared_1.GAME_CONSTANTS.MIN_PLAYERS} and ${shared_1.GAME_CONSTANTS.MAX_PLAYERS}.`);
+                return;
+            }
+            // 현재 플레이어 수보다 작게 설정하려는 경우 체크
+            if (newMax < this.state.players.size) {
+                console.log(`[MafiaRoom.update_max_players] 현재 플레이어 수(${this.state.players.size})보다 작은 값으로 설정 불가: ${newMax}`);
+                this.sendError(client, shared_1.ErrorCode.INVALID_ACTION, `Cannot set max players below current player count (${this.state.players.size}).`);
+                return;
+            }
+            this.maxPlayers = newMax;
+            this.state.maxPlayers = newMax;
+            this.setMetadata({ ...this.metadata, maxPlayers: newMax });
+            console.log(`[MafiaRoom.update_max_players] 최대 인원 수 업데이트: ${newMax}`);
+            this.broadcast("announcement", { message: `방 최대 인원이 ${newMax}명으로 변경되었습니다.`, type: "info" });
+        });
+    }
+    /**
+     * 주술사 강제 스킬 처리
+     * 타겟 플레이어의 턴이 시작되면 클라이언트에게 스킬 사용 신호를 보냄
+     * 프론트엔드에서 팝업을 강제로 열어 사용자가 선택할 수 있도록 함
+     */
+    handleShamanForcedSkill(playerId) {
+        const player = this.state.players.get(playerId);
+        if (!player || !player.activeEffects.includes("shaman_forced_skill"))
+            return;
+        const skillId = player.characterId;
+        if (!skillId) {
+            // 캐릭터가 없으면 효과 제거
+            const idx = player.activeEffects.indexOf("shaman_forced_skill");
+            if (idx !== -1)
+                player.activeEffects.splice(idx, 1);
+            return;
+        }
+        // 스킬 사용 가능 여부 재확인
+        const skillInfo = shared_1.CHARACTER_SKILLS[skillId];
+        if (!skillInfo) {
+            const idx = player.activeEffects.indexOf("shaman_forced_skill");
+            if (idx !== -1)
+                player.activeEffects.splice(idx, 1);
+            return;
+        }
+        // 횟수 제한 스킬 체크
+        if (skillInfo.cooldown === 0 && skillInfo.maxUses) {
+            if (player.skillUsesLeft <= 0) {
+                const idx = player.activeEffects.indexOf("shaman_forced_skill");
+                if (idx !== -1)
+                    player.activeEffects.splice(idx, 1);
+                return;
+            }
+        }
+        else {
+            // 쿨타임 기반 스킬 체크
+            if (player.skillProgress < player.skillMaxCooldown) {
+                const idx = player.activeEffects.indexOf("shaman_forced_skill");
+                if (idx !== -1)
+                    player.activeEffects.splice(idx, 1);
+                return;
+            }
+        }
+        // 클라이언트에게 스킬 사용 신호 전송 (팝업 강제 오픈)
+        // 사용자가 직접 스킬을 선택할 수 있도록 프론트엔드에서 팝업을 열도록 함
+        const client = Array.from(this.clients.values()).find(c => c.sessionId === playerId);
+        if (client) {
+            client.send("shaman_force_skill", {
+                skillId: skillId,
+                message: "주술사에 의해 스킬을 사용해야 합니다."
+            });
+        }
+    }
+    /**
+     * 턴이 넘어가기 전 주술사 강제 스킬 사용 여부 체크
+     * 스킬을 사용하지 않았다면 카드 3장을 지급 (일반 카드 뽑기와 별개)
+     */
+    checkShamanForcedSkillBeforeTurnEnd(playerId) {
+        const player = this.state.players.get(playerId);
+        if (!player || !player.activeEffects.includes("shaman_forced_skill"))
+            return;
+        // 스킬을 사용하지 않았으므로 페널티 적용
+        console.log(`${playerId} did not use skill -> Applying Shaman Penalty (3 cards)`);
+        const penaltyCount = 3;
+        for (let i = 0; i < penaltyCount; i++) {
+            if (this.deck.count === 0) {
+                this.deck.replenish();
+                if (this.deck.count === 0)
+                    break;
+            }
+            const card = this.deck.draw();
+            if (card) {
+                player.hand.push(new shared_1.CardSchema(card.id, card.suit, card.rank));
+            }
+        }
+        this.state.deckCount = this.deck.count;
+        // 효과 제거
+        const idx = player.activeEffects.indexOf("shaman_forced_skill");
+        if (idx !== -1)
+            player.activeEffects.splice(idx, 1);
+        this.broadcast("announcement", `${player.nickname} did not use skill and drew 3 cards due to shaman forced skill.`);
+        // 파산 체크
+        if (player.hand.length > shared_1.GAME_CONSTANTS.MAX_HAND_SIZE) {
+            const client = Array.from(this.clients.values()).find(c => c.sessionId === playerId);
+            if (client) {
+                this.handlePlayerElimination(client, 'burst');
+            }
+        }
+    }
+    handleDrawCard(client) {
+        const player = this.state.players.get(client.sessionId);
+        if (!player)
+            return;
+        const cardsToDraw = this.state.attackStack > 0 ? this.state.attackStack : 1;
+        const drawnCards = [];
+        for (let i = 0; i < cardsToDraw; i++) {
+            if (this.deck.count === 0) {
+                this.deck.replenish();
+                if (this.deck.count === 0)
+                    break;
+            }
+            const card = this.deck.draw();
+            if (card) {
+                drawnCards.push(card);
+                player.hand.push(new shared_1.CardSchema(card.id, card.suit, card.rank));
+            }
+        }
+        if (this.deck.count === 0) {
+            this.deck.replenish();
+        }
+        this.state.deckCount = this.deck.count;
+        this.state.attackStack = 0;
+        client.send("draw_card_response", {
+            success: true,
+            drawnCard: drawnCards.length > 0 ? drawnCards[0] : null
+        });
+        console.log(`${client.sessionId} drew ${drawnCards.length} cards.`);
+        // 턴이 넘어가기 전 주술사 강제 스킬 체크
+        this.checkShamanForcedSkillBeforeTurnEnd(client.sessionId);
+        this.turnManager.nextTurn();
+        if (player.hand.length > shared_1.GAME_CONSTANTS.MAX_HAND_SIZE) {
+            this.handlePlayerElimination(client, 'burst');
+        }
+    }
+    checkStartGame() {
+        try {
+            console.log(`[MafiaRoom.checkStartGame] 게임 시작 조건 확인 시작`);
+            console.log(`[MafiaRoom.checkStartGame] 현재 상태: status=${this.state.status}, players=${this.state.players.size}, mode=${this.gameMode}`);
+            if (this.state.status === "PLAYING") {
+                console.log(`[MafiaRoom.checkStartGame] 게임이 이미 진행 중이므로 무시`);
+                return;
+            }
+            // 빠른 게임 모드: 최소 3명 필요
+            // 커스텀 게임 모드: 최소 2명 필요
+            const minPlayers = this.gameMode === 'quick' ? 3 : 2;
+            console.log(`[MafiaRoom.checkStartGame] 최소 플레이어 수: ${minPlayers}`);
+            if (this.state.players.size < minPlayers) {
+                console.log(`[MafiaRoom.checkStartGame] 플레이어 수 부족: ${this.state.players.size} < ${minPlayers}`);
+                return;
+            }
+            let allReady = true;
+            const readyStatus = {};
+            this.state.players.forEach((player, sessionId) => {
+                readyStatus[sessionId] = player.isReady;
+                if (!player.isReady)
+                    allReady = false;
+            });
+            console.log(`[MafiaRoom.checkStartGame] 플레이어 준비 상태:`, readyStatus);
+            if (allReady) {
+                console.log(`[MafiaRoom.checkStartGame] 모든 플레이어 준비 완료. 게임 시작!`);
+                console.log(`[MafiaRoom.checkStartGame] 총 ${this.state.players.size}명의 플레이어가 준비됨`);
+                this.startGame();
+            }
+            else {
+                console.log(`[MafiaRoom.checkStartGame] 아직 준비하지 않은 플레이어가 있음`);
+            }
+        }
+        catch (e) {
+            console.error("[MafiaRoom.checkStartGame] 에러:", e);
+        }
+    }
+    startGame() {
+        try {
+            // 이미 게임이 진행 중이면 무시 (중복 호출 방지)
+            if (this.state.status === "PLAYING") {
+                console.log(`[MafiaRoom.startGame] 게임이 이미 진행 중. 중복 호출 무시.`);
+                return;
+            }
+            console.log(`[MafiaRoom.startGame] 게임 시작 함수 호출`);
+            console.log(`[MafiaRoom.startGame] 현재 플레이어 수: ${this.state.players.size}`);
+            console.log(`[MafiaRoom.startGame] 게임 모드: ${this.gameMode}`);
+            console.log(`[MafiaRoom.startGame] 방 코드: ${this.roomCode || 'none'}`);
+            // 타이머 정리 (혹시 남아있는 로비 타이머가 있을 경우)
+            this.clearTimer();
+            this.state.status = "PLAYING";
+            console.log(`[MafiaRoom.startGame] 게임 상태 변경: LOBBY -> PLAYING`);
+            // 1. Prepare Deck
+            console.log(`[MafiaRoom.startGame] 덱 생성 및 셔플 시작`);
+            this.deck.create();
+            this.deck.shuffle();
+            console.log(`[MafiaRoom.startGame] 덱 생성 완료. 총 카드 수: ${this.deck.count}`);
+            // 2. Assign Random Characters & Init Cooldowns
+            console.log(`[MafiaRoom.startGame] 캐릭터 할당 및 쿨타임 초기화 시작`);
+            const skillKeys = Object.keys(shared_1.CHARACTER_SKILLS);
+            if (skillKeys.length === 0)
+                throw new Error("No skills defined");
+            this.state.players.forEach((player, sessionId) => {
+                // Assign random character if not set (or always random for now)
+                if (!player.characterId) {
+                    const randomSkill = skillKeys[Math.floor(Math.random() * skillKeys.length)];
+                    player.characterId = randomSkill;
+                    console.log(`[MafiaRoom.startGame] 플레이어 ${sessionId} (${player.nickname})에게 랜덤 캐릭터 할당: ${randomSkill}`);
+                }
+                else {
+                    console.log(`[MafiaRoom.startGame] 플레이어 ${sessionId} (${player.nickname})의 캐릭터: ${player.characterId}`);
+                }
+                const skillInfo = shared_1.CHARACTER_SKILLS[player.characterId];
+                if (skillInfo) {
+                    if (skillInfo.cooldown === 0) {
+                        player.skillUsesLeft = skillInfo.maxUses || 0;
+                        player.skillMaxCooldown = 0;
+                        console.log(`[MafiaRoom.startGame] 플레이어 ${sessionId} 스킬 사용 횟수: ${player.skillUsesLeft}`);
+                    }
+                    else {
+                        player.skillMaxCooldown = skillInfo.cooldown;
+                        player.skillProgress = 0; // Start with 0 charge
+                        console.log(`[MafiaRoom.startGame] 플레이어 ${sessionId} 스킬 쿨타임: ${player.skillMaxCooldown}`);
+                    }
+                }
+            });
+            // 3. Distribute
+            console.log(`[MafiaRoom.startGame] 카드 분배 시작. 초기 핸드 크기: ${shared_1.GAME_CONSTANTS.INITIAL_HAND_SIZE}`);
+            this.state.players.forEach((player, sessionId) => {
+                player.hand.clear(); // Reset hand just in case
+                for (let i = 0; i < shared_1.GAME_CONSTANTS.INITIAL_HAND_SIZE; i++) {
+                    const card = this.deck.draw();
+                    if (card)
+                        player.hand.push(new shared_1.CardSchema(card.id, card.suit, card.rank));
+                }
+                console.log(`[MafiaRoom.startGame] 플레이어 ${sessionId} (${player.nickname})에게 ${player.hand.length}장 분배`);
+            });
+            // 4. Initial Card
+            console.log(`[MafiaRoom.startGame] 초기 카드 뽑기`);
+            const initial = this.deck.draw();
+            if (initial) {
+                // Do NOT push to discard yet. It stays as TopCard.
+                // Engine will push it to discard when the next card is played.
+                this.state.topCard = new shared_1.CardSchema(initial.id, initial.suit, initial.rank);
+                console.log(`[MafiaRoom.startGame] 초기 카드: ${initial.suit}-${initial.rank}`);
+            }
+            this.state.deckCount = this.deck.count;
+            console.log(`[MafiaRoom.startGame] 남은 덱 카드 수: ${this.state.deckCount}`);
+            // 5. First Turn
+            const firstPlayerId = Array.from(this.state.players.keys())[0];
+            const firstPlayer = this.state.players.get(firstPlayerId);
+            this.state.currentTurn = firstPlayerId;
+            console.log(`[MafiaRoom.startGame] 첫 번째 턴 플레이어: ${firstPlayerId} (${firstPlayer?.nickname || 'unknown'})`);
+            // 이전 턴 플레이어 ID 초기화 (첫 턴이므로 null)
+            this.previousTurnPlayerId = null;
+            // Start turn for first player (triggers cooldown update for them)
+            this.skillManager.onTurnStart(firstPlayerId);
+            // 주술사 강제 스킬 처리 (턴 시작 시 자동 스킬 사용)
+            this.handleShamanForcedSkill(firstPlayerId);
+            // 첫 번째 플레이어도 10초 타이머 시작
+            this.startTimer(10, () => this.handleTurnTimeout(firstPlayerId));
+            console.log(`[MafiaRoom.startGame] 첫 번째 플레이어 타이머 시작 (10초)`);
+            console.log(`[MafiaRoom.startGame] 게임 시작 완료!`);
+            this.broadcast("game_start", { initialCard: this.state.topCard });
+            console.log(`[MafiaRoom.startGame] game_start 메시지 브로드캐스트 완료`);
+        }
+        catch (e) {
+            console.error("[MafiaRoom.startGame] 에러:", e);
+            this.broadcast("announcement", "Game start failed: " + e);
+            this.state.status = "LOBBY"; // Revert to lobby
+            console.log(`[MafiaRoom.startGame] 게임 시작 실패. 상태를 LOBBY로 되돌림`);
+        }
+    }
+    onJoin(client, options) {
+        console.log(`[MafiaRoom.onJoin] 플레이어 입장 시도. SessionId: ${client.sessionId}`);
+        console.log(`[MafiaRoom.onJoin] Options:`, JSON.stringify(options));
+        console.log(`[MafiaRoom.onJoin] 현재 방 상태: status=${this.state.status}, players=${this.state.players.size}, roomCode=${this.roomCode || 'none'}`);
+        const requestedMode = options?.mode || 'custom';
+        const requestedRoomCode = options?.roomCode ? options.roomCode.toUpperCase() : null;
+        console.log(`[MafiaRoom.onJoin] 요청된 모드: ${requestedMode}, 요청된 방 코드: ${requestedRoomCode || 'none'}`);
+        // 빠른 게임 모드로 접속하려는 경우, 진행 중인 게임에 합류 방지
+        if (requestedMode === 'quick' && this.state.status === "PLAYING") {
+            console.log(`[MafiaRoom.onJoin] [REJECT] 빠른 게임 플레이어가 진행 중인 게임에 접속 시도. 거부합니다.`);
+            console.log(`[MafiaRoom.onJoin] 현재 게임 상태: ${this.state.status}, 플레이어 수: ${this.state.players.size}`);
+            client.send("announcement", {
+                message: "진행 중인 게임이 있습니다. 잠시 후 다시 시도해주세요.",
+                type: "error"
+            });
+            client.leave(1000, "Game already in progress");
+            return;
+        }
+        // 커스텀 게임 모드: 방 코드 검증 및 인원수 체크
+        if (requestedMode === 'custom') {
+            console.log(`[MafiaRoom.onJoin] 커스텀 게임 모드 검증 시작`);
+            // 방이 이미 생성되어 있고 방 코드가 설정되어 있는 경우
+            if (this.roomCode !== null) {
+                console.log(`[MafiaRoom.onJoin] 기존 방에 조인 시도. 방 코드: ${this.roomCode}, 현재 인원: ${this.state.players.size}, 최대 인원: ${this.maxPlayers}`);
+                // 방이 가득 찬 경우 체크
+                if (this.state.players.size >= this.maxPlayers) {
+                    console.log(`[MafiaRoom.onJoin] [REJECT] 방이 가득 참. 현재: ${this.state.players.size}, 최대: ${this.maxPlayers}`);
+                    client.send("announcement", {
+                        message: `방이 가득 찼습니다. (최대 ${this.maxPlayers}명)`,
+                        type: "error"
+                    });
+                    client.leave(1000, "Room is full");
+                    return;
+                }
+                // 조인하려는 방 코드와 일치하는지 확인
+                if (requestedRoomCode !== this.roomCode) {
+                    console.log(`[MafiaRoom.onJoin] [REJECT] 방 코드 불일치. 요청: ${requestedRoomCode}, 방 코드: ${this.roomCode}`);
+                    client.send("announcement", {
+                        message: "존재하지 않는 방입니다. 방 코드를 확인해주세요.",
+                        type: "error"
+                    });
+                    client.leave(1000, "Invalid room code");
+                    return;
+                }
+                console.log(`[MafiaRoom.onJoin] 방 코드 일치 확인. 조인 허용`);
+            }
+            else {
+                // 첫 번째 플레이어가 방을 만드는 경우 (호스트)
+                console.log(`[MafiaRoom.onJoin] 첫 번째 플레이어 (호스트) 입장. 방 코드 설정 시도`);
+                // 방 코드가 제공되었으면 저장, 없으면 에러
+                if (requestedRoomCode) {
+                    this.roomCode = requestedRoomCode;
+                    // maxPlayers도 options에서 가져오기 (호스트가 설정한 값)
+                    if (options?.maxPlayers && options.maxPlayers >= shared_1.GAME_CONSTANTS.MIN_PLAYERS && options.maxPlayers <= shared_1.GAME_CONSTANTS.MAX_PLAYERS) {
+                        this.maxPlayers = options.maxPlayers;
+                    }
+                    console.log(`[MafiaRoom.onJoin] 호스트가 방 코드 설정: ${this.roomCode}, 최대 인원: ${this.maxPlayers}`);
+                    // 메타데이터 업데이트 (filterBy를 위한)
+                    this.setMetadata({ roomCode: this.roomCode, mode: 'custom', maxPlayers: this.maxPlayers });
+                    console.log(`[MafiaRoom.onJoin] 메타데이터 업데이트 완료`);
+                }
+                else {
+                    console.log(`[MafiaRoom.onJoin] [REJECT] 호스트가 방 코드 없이 방을 만들려고 시도함.`);
+                    client.send("announcement", {
+                        message: "방 코드가 필요합니다.",
+                        type: "error"
+                    });
+                    client.leave(1000, "Room code required");
+                    return;
+                }
+            }
+        }
+        // 이전 게임이 종료된 상태에서 새로운 플레이어가 접속한 경우 상태 리셋
+        if (this.state.status === "ENDED") {
+            console.log("Previous game ended. Resetting room state to LOBBY.");
+            this.state.status = "LOBBY";
+            this.state.currentTurn = "";
+            this.state.attackStack = 0;
+            this.state.deckCount = 0;
+            this.state.topCard = new shared_1.CardSchema("", "SPADE", "A");
+            this.state.selectedSuit = "";
+            this.state.winnerId = "";
+            this.state.timerEndTime = 0;
+            // 기존 플레이어들도 초기화 (또는 모두 제거)
+            this.state.players.forEach((player) => {
+                player.isReady = false;
+                player.hand.clear();
+            });
+        }
+        const player = new shared_1.PlayerSchema();
+        if (options?.name)
+            player.nickname = options.name;
+        if (options?.characterId) {
+            player.characterId = options.characterId;
+            console.log(`[MafiaRoom.onJoin] 플레이어 캐릭터 선택: ${client.sessionId} -> ${options.characterId}`);
+        }
+        if (this.state.players.size === 0) {
+            player.isHost = true;
+            console.log(`[MafiaRoom.onJoin] 첫 번째 플레이어이므로 호스트로 설정: ${client.sessionId}`);
+        }
+        // 게임 모드 업데이트 (새 플레이어가 빠른 게임 모드로 접속한 경우)
+        if (options?.mode) {
+            const oldMode = this.gameMode;
+            this.gameMode = options.mode;
+            console.log(`[MafiaRoom.onJoin] 게임 모드 업데이트: ${oldMode} -> ${this.gameMode}`);
+        }
+        // 빠른 게임 모드: 플레이어 입장 시 자동으로 준비 상태로 설정
+        if (this.gameMode === 'quick') {
+            player.isReady = true;
+            console.log(`[MafiaRoom.onJoin] 빠른 게임 모드: ${client.sessionId} 자동 준비 상태로 설정`);
+        }
+        this.state.players.set(client.sessionId, player);
+        console.log(`[MafiaRoom.onJoin] 플레이어 추가 완료. 닉네임: ${player.nickname}, 호스트: ${player.isHost}, 준비: ${player.isReady}`);
+        console.log(`[MafiaRoom.onJoin] 현재 플레이어 수: ${this.state.players.size}`);
+        // 빠른 게임 모드: 플레이어 접속 시마다 체크
+        if (this.gameMode === 'quick' && this.state.status === "LOBBY") {
+            const currentCount = this.state.players.size;
+            // 5명이 모이면 즉시 게임 시작 (타이머 대기 없음)
+            if (currentCount >= shared_1.GAME_CONSTANTS.MAX_PLAYERS) {
+                console.log(`Max players (${shared_1.GAME_CONSTANTS.MAX_PLAYERS}) reached. Starting game immediately!`);
+                // 기존 타이머 취소
+                this.clearTimer();
+                this.broadcast("announcement", `Max players (${shared_1.GAME_CONSTANTS.MAX_PLAYERS}) gathered. Starting game!`);
+                this.startGame();
+                return;
+            }
+            // 5명 미만이면 타이머 리셋
+            // 마지막 플레이어 접속 시점부터 5초 후 checkLobbyTimerStep1 호출
+            console.log(`Player joined. Resetting lobby timer (5s from now)...`);
+            this.startTimer(5, () => this.checkLobbyTimerStep1());
+        }
+        // 커스텀 게임 모드: 방장이 start_game 메시지를 보내야 게임 시작
+        // 빠른 게임 모드: 타이머가 만료된 후 자동 시작 (checkLobbyTimerStep1에서 처리)
+        // (커스텀 게임에서는 여기서 checkStartGame()을 호출하지 않음)
+    }
+    onLeave(client, consented) {
+        const player = this.state.players.get(client.sessionId);
+        const wasHost = player?.isHost || false;
+        if (this.state.status === "PLAYING") {
+            this.handlePlayerElimination(client, 'player_left');
+        }
+        else {
+            this.state.players.delete(client.sessionId);
+        }
+        // 커스텀 게임에서 호스트가 나간 경우 처리
+        if (this.gameMode === 'custom' && wasHost && this.state.status === 'LOBBY') {
+            console.log(`[MafiaRoom.onLeave] 호스트가 방을 나갔습니다. SessionId: ${client.sessionId}`);
+            // 방에 플레이어가 없으면 방 삭제
+            if (this.state.players.size === 0) {
+                console.log(`[MafiaRoom.onLeave] 방에 플레이어가 없으므로 방을 삭제합니다.`);
+                this.disconnect();
+                return;
+            }
+            // 방에 플레이어가 있으면 첫 번째 플레이어에게 방장 인계
+            const remainingPlayers = Array.from(this.state.players.values());
+            if (remainingPlayers.length > 0) {
+                const newHost = remainingPlayers[0];
+                newHost.isHost = true;
+                const newHostSessionId = Array.from(this.state.players.keys())[0];
+                console.log(`[MafiaRoom.onLeave] 새로운 호스트 지정: ${newHost.nickname} (SessionId: ${newHostSessionId})`);
+                this.broadcast("announcement", {
+                    message: `${newHost.nickname}님이 새로운 방장이 되었습니다.`,
+                    type: "info"
+                });
+            }
+        }
+    }
+    handlePlayerElimination(client, reason) {
+        const player = this.state.players.get(client.sessionId);
+        if (!player)
+            return;
+        // 1. Turn Handover
+        if (this.state.currentTurn === client.sessionId) {
+            this.turnManager.nextTurn();
+        }
+        // 2. Return Cards
+        Array.from(player.hand).forEach(card => {
+            this.deck.pushToDiscard({ id: card.id, suit: card.suit, rank: card.rank });
+        });
+        this.deck.shuffle();
+        // 3. Stats & Message
+        const rank = this.state.players.size; // 탈락한 시점의 인원 수 = 등수 (예: 4명 중 탈락 -> 4등)
+        client.send("game_end", { winnerId: "", reason, stats: { rank, handCount: player.hand.length } });
+        this.state.players.delete(client.sessionId);
+        this.broadcast("announcement", `${client.sessionId} eliminated (${reason}). Rank: ${rank}`);
+        if (this.state.players.size === 1) {
+            const winnerId = Array.from(this.state.players.keys())[0];
+            this.state.status = "ENDED";
+            this.handleGameEnd(winnerId);
+        }
+    }
+    handleGameEnd(winnerId) {
+        console.log(`Game Ended. Winner: ${winnerId}`);
+        // 랭킹 계산 (남은 카드 적은 순 -> 턴 순서)
+        const stats = this.calculateFinalStats(winnerId);
+        this.broadcast("game_end", {
+            winnerId,
+            reason: 'hand_empty',
+            stats // { [sessionId]: { rank: 1, handCount: 0 }, ... }
+        });
+    }
+    calculateFinalStats(winnerId) {
+        // 1. Setup Order Info
+        const allIds = Array.from(this.state.players.keys());
+        const winnerIndex = allIds.indexOf(winnerId);
+        const direction = this.state.direction || "clockwise";
+        const totalPlayers = allIds.length;
+        const players = Array.from(this.state.players.entries()).map(([id, player]) => {
+            // Distance Calculation (Tie-Breaker)
+            // Lower distance = Higher Rank (played sooner)
+            let myIndex = allIds.indexOf(id);
+            let distance = 0;
+            if (direction === "clockwise") {
+                distance = (myIndex - winnerIndex + totalPlayers) % totalPlayers;
+            }
+            else {
+                distance = (winnerIndex - myIndex + totalPlayers) % totalPlayers;
+            }
+            return {
+                id,
+                handCount: player.hand.length,
+                distance // 0 for winner
+            };
+        });
+        // 2. Sort Logic
+        players.sort((a, b) => {
+            // Primary: Hand Count (Lower is better)
+            if (a.handCount !== b.handCount) {
+                return a.handCount - b.handCount;
+            }
+            // Secondary: Turn Distance (Lower is better / Sooner turn)
+            // If hand counts are equal, the one closer to the winner (in turn order) gets higher rank.
+            return a.distance - b.distance;
+        });
+        // 3. Assign Ranks
+        const stats = {};
+        players.forEach((p, index) => {
+            stats[p.id] = {
+                rank: index + 1,
+                handCount: p.handCount
+            };
+        });
+        return stats;
+    }
+    sendError(client, code, message) {
+        client.send("error", { code, message });
+    }
+}
+exports.MafiaRoom = MafiaRoom;
